@@ -1,0 +1,25 @@
+{
+  "name": "secretariat",
+  "private": true,
+  "workspaces": [
+    "contracts",
+    "app",
+    "server"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "deploy:og": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_0G --broadcast",
+    "deploy:adi": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_ADI --broadcast",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "env:from-broadcast": "tsx scripts/write-env-from-broadcast.ts",
+    "sync-env": "cp .env app/.env 2>/dev/null || true",
+    "run:server": "cd server && npm run dev",
+    "run:app": "cd app && npm run dev"
+  },
+  "devDependencies": {
+    "dotenv": "^16.3.1",
+    "tsx": "^4.7.0",
+    "viem": "^2.0.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "w_traits": 0.35,
+  "w_pedigree": 0.25,
+  "w_inbreeding": 0.2,
+  "w_cost": 0.15,
+  "w_form": 0.05
+}
