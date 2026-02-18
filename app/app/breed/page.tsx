@@ -22,6 +22,9 @@ import {
   keccak256,
   toHex,
 } from "viem";
+import { PedigreeTree } from "@/components/PedigreeTree";
+import { useReadContract } from "wagmi";
+import { MAX_HORSE_ID_TO_FETCH, isOnChainHorse } from "@/lib/on-chain-horses";
 
 const BREEDING_PLAN_TYPE = {
   BreedingPlan: [
@@ -46,8 +49,10 @@ export default function BreedPage() {
   const [offspringName, setOffspringName] = useState("");
   const [executeMode, setExecuteMode] = useState(false);
   const [picks, setPicks] = useState<Recommendation[] | null>(null);
+  const [selectedStallionId, setSelectedStallionId] = useState<number | null>(null);
+  const [directBreedName, setDirectBreedName] = useState("");
 
-  const horseIds = [0, 1, 2, 3, 4];
+  const horseIds = Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => i);
   const horseCalls = horseIds.map((id) => ({
     address: addresses.horseINFT,
     abi: abis.HorseINFT,
@@ -64,7 +69,7 @@ export default function BreedPage() {
   const { data: listingsData } = useReadContracts({ contracts: listingCalls as any });
 
   const horses: HorseTraits[] = (horsesData ?? []).map((c, i) => {
-    if (c.status !== "success" || !c.result) return null;
+    if (c.status !== "success" || !c.result || !isOnChainHorse(c.result)) return null;
     const r = c.result as any;
     if (!r[4]) return null;
     const list = listingsData?.[i];
@@ -93,6 +98,16 @@ export default function BreedPage() {
   const { writeContract: purchaseRight } = useWriteContract();
   const { signTypedDataAsync } = useSignTypedData();
   const { writeContract: executePlan } = useWriteContract();
+  const { writeContract: breedDirect } = useWriteContract();
+
+  // Check if user has breeding right for selected stallion
+  const { data: hasBreedingRight } = useReadContract({
+    address: addresses.breedingMarketplace,
+    abi: abis.BreedingMarketplace,
+    functionName: "hasBreedingRight",
+    args: selectedStallionId !== null && address ? [BigInt(selectedStallionId), address] : undefined,
+    enabled: selectedStallionId !== null && !!address,
+  });
 
   const handlePurchaseRight = async (stallionId: number) => {
     const seed = keccak256(toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`)));
@@ -130,6 +145,19 @@ export default function BreedPage() {
     });
   };
 
+  const handleDirectBreed = async () => {
+    if (!address || !mare || selectedStallionId === null) return;
+    if (!directBreedName || !validateHorseName(directBreedName).valid) return;
+    
+    const salt = keccak256(toHex(new TextEncoder().encode(`${address}-${Date.now()}`)));
+    await breedDirect({
+      address: addresses.breedingMarketplace,
+      abi: abis.BreedingMarketplace,
+      functionName: "breed",
+      args: [BigInt(selectedStallionId), BigInt(mare.tokenId), directBreedName, salt],
+    });
+  };
+
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -137,8 +165,7 @@ export default function BreedPage() {
           Breeding Lab
         </h1>
         <p className="text-sm text-muted-foreground">
-          Select a mare, get top 3 stallion recommendations, then purchase and
-          execute a breeding plan with on-chain agents.
+          Select a mare, purchase breeding rights, and breed directly. New horses automatically inherit full pedigree data (sireId/damId) for complete lineage tracking.
         </p>
       </header>
       {!address ? (
@@ -207,15 +234,128 @@ export default function BreedPage() {
                   })}
                   {horses.length === 0 && (
                     <p className="text-xs text-muted-foreground px-1 py-2">
-                      No demo horses found. Seed horses on-chain to use the
-                      breeding lab.
+                      No on-chain horses found. Deploy contracts and run seed script to mint horses.
                     </p>
                   )}
                 </div>
               </div>
+
+              {/* Pedigree Tree */}
+              {mare && (
+                <div className="rounded-sm border border-border bg-card p-4">
+                  <PedigreeTree tokenId={mare.tokenId} maxDepth={4} />
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
+              {/* Direct Breeding Section */}
+              <section className="rounded-sm border border-border bg-card p-4 space-y-4">
+                <h2 className="text-xs font-semibold text-foreground tracking-wide">
+                  Direct Breeding
+                </h2>
+                <p className="text-[11px] text-muted-foreground">
+                  Select a stallion, purchase breeding right (if needed), then breed directly. The offspring will be minted automatically with full inheritance data.
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-2">
+                      Select Stallion
+                    </label>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {stallions.map((s) => (
+                        <button
+                          key={s.tokenId}
+                          type="button"
+                          onClick={() => setSelectedStallionId(s.tokenId)}
+                          className={`w-full text-left px-3 py-2 rounded-sm border text-sm transition-colors ${
+                            selectedStallionId === s.tokenId
+                              ? "border-terminal-green/70 bg-secondary/80"
+                              : "border-border bg-secondary/40 hover:bg-secondary/70"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="font-medium text-foreground truncate">
+                                {String(s.name || `Stallion #${s.tokenId}`)}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Stud Fee: {Number(s.studFeeADI || 0n) / 1e18} ADI · Pedigree: {(s.pedigreeScore / 100).toFixed(1)}%
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                      {stallions.length === 0 && (
+                        <p className="text-xs text-muted-foreground px-1 py-2">
+                          No stallions available for breeding
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedStallionId !== null && mare && (
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <div className="flex items-center gap-2">
+                        {hasBreedingRight ? (
+                          <span className="text-[10px] text-terminal-green font-mono">
+                            ✓ Breeding right active
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handlePurchaseRight(selectedStallionId)}
+                            className="px-3 py-1 rounded-sm bg-secondary text-xs font-mono hover:bg-secondary/80 transition-colors"
+                          >
+                            Purchase breeding right
+                          </button>
+                        )}
+                      </div>
+
+                      {hasBreedingRight && (
+                        <div className="space-y-2">
+                          <input
+                            placeholder="Offspring name"
+                            className={`w-full px-3 py-2 rounded-sm bg-secondary text-sm border ${
+                              directBreedName &&
+                              !validateHorseName(directBreedName).valid
+                                ? "border-destructive/60"
+                                : "border-border"
+                            }`}
+                            value={directBreedName}
+                            onChange={(e) => setDirectBreedName(e.target.value)}
+                          />
+                          {directBreedName &&
+                            !validateHorseName(directBreedName).valid && (
+                              <p className="text-[10px] text-destructive">
+                                {validateHorseName(directBreedName).errors.join("; ")}
+                              </p>
+                            )}
+                          {directBreedName &&
+                            validateHorseName(directBreedName).valid && (
+                              <p className="text-[10px] text-terminal-green">
+                                Name valid (Jockey Club rules)
+                              </p>
+                            )}
+                          <button
+                            onClick={handleDirectBreed}
+                            disabled={
+                              !directBreedName ||
+                              !validateHorseName(directBreedName).valid
+                            }
+                            className="w-full px-4 py-2 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Breed & Mint Offspring
+                          </button>
+                          <p className="text-[10px] text-muted-foreground">
+                            The new horse will be minted with sireId={selectedStallionId} and damId={mare.tokenId}, preserving full inheritance lineage.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
               {advisorActive && (
                 <section className="rounded-sm border border-border bg-card p-4 space-y-4">
                   <div className="flex items-center justify-between gap-3">
@@ -337,30 +477,30 @@ export default function BreedPage() {
 
           <section className="rounded-sm border border-border bg-card p-4 space-y-2">
             <h2 className="text-xs font-semibold text-foreground tracking-wide">
-              Execution timeline
+              Breeding Process
             </h2>
             <p className="text-[11px] text-muted-foreground">
-              Advisor mode: recommend-only. Execute mode: sign typed plan and
-              let the agent contract purchase rights and call{" "}
-              <span className="font-mono">
-                breed(stallionId, mareId, offspringName, salt)
-              </span>
-              .
+              <strong>Direct Breeding:</strong> Purchase breeding right → Breed directly → Offspring minted with full inheritance (sireId/damId).
+              <br />
+              <strong>Agent Mode:</strong> Sign typed plan → Agent executes → Offspring minted.
             </p>
             <div className="mt-2 flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
               <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
-                1. Approve ADI
+                1. Approve ADI (if needed)
               </span>
               <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
                 2. Purchase breeding right
               </span>
               <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
-                3. Sign BreedingPlan
+                3. Breed & Mint
               </span>
-              <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
-                4. Offspring minted
+              <span className="px-3 py-1 rounded-sm bg-terminal-green/20 border border-terminal-green/40 text-terminal-green">
+                4. Inheritance tracked
               </span>
             </div>
+            <p className="text-[10px] text-muted-foreground mt-2">
+              All new horses carry sireId and damId, enabling complete pedigree tree tracing back to founders.
+            </p>
           </section>
         </>
       )}

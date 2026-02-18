@@ -3,6 +3,7 @@
 import { useReadContracts } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
 import { calculateOfficialAge } from "../../../shared/age";
+import { AdiDisplay } from "@/components/AdiDisplay";
 import { useEffect, useMemo, useState } from "react";
 import { Search, ArrowUpDown, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -15,8 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useRouter } from "next/navigation";
+import { MAX_HORSE_ID_TO_FETCH, isOnChainHorse } from "@/lib/on-chain-horses";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
+
+const HORSE_IDS = Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => i);
 
 type SortKey = "name" | "valuationADI" | "pedigreeScore" | "age";
 
@@ -36,19 +40,18 @@ type TrainingEvent = {
 export default function MarketplacePage() {
   const router = useRouter();
   const { data: contracts, isLoading, isError, error } = useReadContracts({
-    contracts: [
-      { address: addresses.horseINFT, abi: abis.HorseINFT, functionName: "getHorseData", args: [0n] },
-      { address: addresses.horseINFT, abi: abis.HorseINFT, functionName: "getHorseData", args: [1n] },
-      { address: addresses.horseINFT, abi: abis.HorseINFT, functionName: "getHorseData", args: [2n] },
-      { address: addresses.horseINFT, abi: abis.HorseINFT, functionName: "getHorseData", args: [3n] },
-      { address: addresses.horseINFT, abi: abis.HorseINFT, functionName: "getHorseData", args: [4n] },
-    ],
+    contracts: HORSE_IDS.map((id) => ({
+      address: addresses.horseINFT,
+      abi: abis.HorseINFT,
+      functionName: "getHorseData" as const,
+      args: [BigInt(id)] as [bigint],
+    })) as any,
   });
 
   const results = (contracts ?? []).map((c) => {
-    if (c.status !== "success") return null;
+    if (c.status !== "success" || !c.result) return null;
     const r = c.result as any;
-    if (!r) return null;
+    if (!isOnChainHorse(r)) return null;
     return {
       name: r.name ?? r[0],
       birthTimestamp: r.birthTimestamp ?? r[1],
@@ -60,9 +63,10 @@ export default function MarketplacePage() {
   const noAddress = addresses.horseINFT.toLowerCase() === ZERO;
 
   const horses = useMemo(() => {
-    return results
-      .map((data, tokenId) => {
+    return (results ?? [])
+      .map((data: any, index: number) => {
         if (!data) return null;
+        const tokenId = HORSE_IDS[index];
         const score = data.pedigreeScore != null ? Number(data.pedigreeScore) : 0;
         const valuationADI = data.valuationADI != null ? BigInt(data.valuationADI) : 0n;
         const birthTs = data.birthTimestamp != null ? Number(data.birthTimestamp) : 0;
@@ -77,13 +81,13 @@ export default function MarketplacePage() {
         };
       })
       .filter(Boolean) as {
-      tokenId: number;
-      name: string;
-      pedigreeScore: number;
-      valuationADI: bigint;
-      age: number | null;
-      breedingAvailable: boolean;
-    }[];
+        tokenId: number;
+        name: string;
+        pedigreeScore: number;
+        valuationADI: bigint;
+        age: number | null;
+        breedingAvailable: boolean;
+      }[];
   }, [results]);
 
   const [search, setSearch] = useState("");
@@ -105,14 +109,14 @@ export default function MarketplacePage() {
         sortKey === "valuationADI"
           ? Number(a.valuationADI)
           : sortKey === "pedigreeScore"
-          ? a.pedigreeScore
-          : a.age ?? 0;
+            ? a.pedigreeScore
+            : a.age ?? 0;
       const bv =
         sortKey === "valuationADI"
           ? Number(b.valuationADI)
           : sortKey === "pedigreeScore"
-          ? b.pedigreeScore
-          : b.age ?? 0;
+            ? b.pedigreeScore
+            : b.age ?? 0;
       return sortAsc ? av - bv : bv - av;
     });
     return list;
@@ -150,7 +154,7 @@ export default function MarketplacePage() {
         }
         setChanges(map);
       } catch {
-        // best-effort: ignore errors, leave changes empty
+        // best-effort: ignore errors
       }
     };
 
@@ -167,68 +171,61 @@ export default function MarketplacePage() {
 
   const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
     <TableHead
-      className="cursor-pointer hover:text-foreground transition-colors text-[10px] font-mono uppercase tracking-wider"
+      className="cursor-pointer hover:text-brand-ivory transition-colors text-[10px] font-sans uppercase tracking-widest text-muted-foreground/80 py-4"
       onClick={() => handleSort(field)}
     >
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         {label}
-        <ArrowUpDown className="h-3 w-3" />
+        <ArrowUpDown className="h-3 w-3 opacity-50" />
       </div>
     </TableHead>
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold tracking-wide text-foreground">
-          Market
-        </h1>
-        <div className="relative w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto p-2">
+      <div className="flex items-center justify-between border-b border-white/5 pb-6">
+        <div>
+          <h1 className="text-3xl font-heading font-bold tracking-wide text-brand-ivory">
+            Marketplace
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1 font-sans">
+            Listed thoroughbreds available for private treaty or auction.
+          </p>
+        </div>
+        <div className="relative w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
           <Input
-            placeholder="Filter horses..."
+            placeholder="Search thoroughbreds..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 pl-8 bg-secondary border-border text-sm font-mono"
+            className="h-9 pl-10 bg-white/5 border-white/5 text-sm font-sans text-brand-ivory placeholder:text-muted-foreground/40 rounded-full focus:bg-white/10 focus:border-white/10 transition-all"
           />
         </div>
       </div>
 
-      {noAddress && (
-        <p className="text-xs text-terminal-amber mb-4 font-mono">
-          Contract not configured. Run{" "}
-          <code className="px-1 rounded bg-card border border-border">
-            npm run env:from-broadcast
-          </code>{" "}
-          in repo root, then restart the app.
-        </p>
-      )}
+      <div className="rounded-lg border border-white/10 overflow-hidden bg-card/60 backdrop-blur-sm shadow-xl">
+        <details className="text-xs text-muted-foreground border-b border-white/5 p-3 bg-black/20">
+          <summary className="cursor-pointer text-muted-foreground hover:text-brand-ivory transition-colors">
+            Debug: contract read diagnostics
+          </summary>
+          <pre className="mt-2 overflow-auto max-h-48 p-2 bg-black/40 rounded">
+            {JSON.stringify({
+              horseINFT: addresses.horseINFT,
+              isLoading,
+              isError,
+              error: error?.message ?? null,
+              contractCount: contracts?.length ?? 0,
+              statuses: contracts?.map((c) => c.status) ?? [],
+            }, null, 2)}
+          </pre>
+        </details>
 
-      <details className="mb-6 text-xs text-muted-foreground border border-border rounded-sm bg-secondary/40 p-3">
-        <summary className="cursor-pointer text-muted-foreground">
-          Debug: contract read diagnostics
-        </summary>
-        <pre className="mt-2 overflow-auto max-h-48">
-          {JSON.stringify({
-            horseINFT: addresses.horseINFT,
-            isLoading,
-            isError,
-            error: error?.message ?? null,
-            contractCount: contracts?.length ?? 0,
-            statuses: contracts?.map((c) => c.status) ?? [],
-            errors: contracts?.map((c) => (c as any).error?.message ?? null) ?? [],
-            firstResult: contracts?.[0] ? JSON.stringify(contracts[0], (_k, v) => typeof v === "bigint" ? v.toString() : v) : null,
-          }, null, 2)}
-        </pre>
-      </details>
-
-      <div className="border border-border rounded-sm overflow-hidden bg-card">
         <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-muted/40 border-border">
+          <TableHeader className="bg-white/5 border-b border-white/5">
+            <TableRow className="hover:bg-transparent border-white/5">
               <SortHeader label="Horse" field="name" />
               <SortHeader label="Valuation (ADI)" field="valuationADI" />
-              <TableHead className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              <TableHead className="text-[10px] font-sans uppercase tracking-widest text-muted-foreground/80 py-4">
                 Δ valuation
               </TableHead>
               <SortHeader label="Pedigree" field="pedigreeScore" />
@@ -239,30 +236,31 @@ export default function MarketplacePage() {
             {filtered.map((horse) => (
               <TableRow
                 key={horse.tokenId}
-                className="hover:bg-muted/60 border-border transition-colors cursor-pointer"
+                className="hover:bg-white/5 border-white/5 transition-colors cursor-pointer group"
                 onClick={() => router.push(`/horse/${horse.tokenId}`)}
               >
                 <TableCell className="font-medium">
-                  {horse.name}
+                  <span className="text-brand-ivory group-hover:text-prestige-gold transition-colors font-sans text-base">
+                    {horse.name}
+                  </span>
                   {horse.breedingAvailable && (
-                    <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded-sm bg-terminal-green/10 text-terminal-green">
-                      Breeding
+                    <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-prestige-gold/10 text-prestige-gold border border-prestige-gold/20">
+                      Stud Ready
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="font-mono">
-                  {Number(horse.valuationADI) / 1e18}
+                <TableCell className="font-heading font-medium text-brand-ivory tracking-wide">
+                  <AdiDisplay value={horse.valuationADI} />
                 </TableCell>
                 <TableCell className="font-mono text-xs">
                   {changes[horse.tokenId] ? (
                     <span
-                      className={`inline-flex items-center gap-1 ${
-                        changes[horse.tokenId].direction === "up"
-                          ? "text-terminal-green"
-                          : changes[horse.tokenId].direction === "down"
+                      className={`inline-flex items-center gap-1 font-bold ${changes[horse.tokenId].direction === "up"
+                        ? "text-terminal-green"
+                        : changes[horse.tokenId].direction === "down"
                           ? "text-terminal-red"
                           : "text-muted-foreground"
-                      }`}
+                        }`}
                     >
                       {changes[horse.tokenId].direction === "up" && (
                         <ArrowUpRight className="h-3 w-3" />
@@ -283,20 +281,29 @@ export default function MarketplacePage() {
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="font-mono">
-                  {(horse.pedigreeScore / 100).toFixed(1)}%
+                <TableCell className="font-mono text-muted-foreground">
+                  <span className="text-brand-ivory/80">{(horse.pedigreeScore / 100).toFixed(1)}</span>
+                  <span className="text-muted-foreground/60">%</span>
                 </TableCell>
-                <TableCell className="font-mono">
+                <TableCell className="font-sans text-muted-foreground text-xs">
                   {horse.age != null ? `${horse.age} yr` : "—"}
                 </TableCell>
               </TableRow>
             ))}
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  No thoroughbreds found.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
+
       {!noAddress && !isLoading && results.every((r) => r == null) && (
-        <p className="text-stone-500 text-sm">
-          No horses yet. Deploy and run seed:demo to mint demo horses.
+        <p className="text-stone-500 text-sm mt-4 text-center">
+          No on-chain horses yet. Deploy contracts and run the seed script to mint horses.
         </p>
       )}
     </div>
