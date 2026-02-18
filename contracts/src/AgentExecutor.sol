@@ -25,12 +25,9 @@ contract AgentExecutor is EIP712 {
 
     event PlanExecuted(address user, uint256 mareTokenId, uint256 stallionId, uint256 offspringId);
 
-    constructor(
-        address _agentINFT,
-        address _marketplace,
-        address _horseNFT,
-        address _adi
-    ) EIP712("SecretariatBreeding", "1") {
+    constructor(address _agentINFT, address _marketplace, address _horseNFT, address _adi)
+        EIP712("SecretariatBreeding", "1")
+    {
         agentINFT = BreedingAdvisorINFT(_agentINFT);
         marketplace = BreedingMarketplace(_marketplace);
         horseNFT = HorseINFT(_horseNFT);
@@ -58,17 +55,19 @@ contract AgentExecutor is EIP712 {
         require(msg.sender == plan.user, "Caller must be plan.user");
         require(block.timestamp <= plan.deadline, "Expired");
         require(plan.user != address(0), "Zero user");
-        bytes32 structHash = keccak256(abi.encode(
-            BREEDING_PLAN_TYPEHASH,
-            plan.user,
-            plan.budgetADI,
-            plan.allowlistedStallionsRoot,
-            plan.maxStudFeeADI,
-            plan.mareTokenId,
-            plan.chosenStallionTokenId,
-            plan.deadline,
-            plan.expectedOffspringTraitFloor
-        ));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                BREEDING_PLAN_TYPEHASH,
+                plan.user,
+                plan.budgetADI,
+                plan.allowlistedStallionsRoot,
+                plan.maxStudFeeADI,
+                plan.mareTokenId,
+                plan.chosenStallionTokenId,
+                plan.deadline,
+                plan.expectedOffspringTraitFloor
+            )
+        );
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = digest.recover(signature);
         require(signer == plan.user, "Invalid signature");
@@ -86,16 +85,20 @@ contract AgentExecutor is EIP712 {
     }
 
     function hashPlan(BreedingPlan calldata plan) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(
-            BREEDING_PLAN_TYPEHASH,
-            plan.user,
-            plan.budgetADI,
-            plan.allowlistedStallionsRoot,
-            plan.maxStudFeeADI,
-            plan.mareTokenId,
-            plan.chosenStallionTokenId,
-            plan.deadline,
-            plan.expectedOffspringTraitFloor
-        )));
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    BREEDING_PLAN_TYPEHASH,
+                    plan.user,
+                    plan.budgetADI,
+                    plan.allowlistedStallionsRoot,
+                    plan.maxStudFeeADI,
+                    plan.mareTokenId,
+                    plan.chosenStallionTokenId,
+                    plan.deadline,
+                    plan.expectedOffspringTraitFloor
+                )
+            )
+        );
     }
 }

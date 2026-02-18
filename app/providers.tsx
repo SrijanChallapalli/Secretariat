@@ -14,6 +14,10 @@ const config = getDefaultConfig({
   appName: "Secretariat",
   projectId,
   chains: [ogGalileo, adiTestnet],
+  transports: {
+    [ogGalileo.id]: http(ogGalileo.rpcUrls.default.http[0]),
+    [adiTestnet.id]: http(adiTestnet.rpcUrls.default.http[0]),
+  },
   ssr: true,
 });
 

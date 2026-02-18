@@ -30,7 +30,7 @@ export async function uploadRoute(req: Request, res: Response) {
       await zgFile.close();
       return;
     }
-    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer);
+    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as unknown as Parameters<Indexer["upload"]>[2]);
     await zgFile.close();
     fs.promises.unlink(filePath).catch(() => {});
 

@@ -22,7 +22,7 @@ contract HorseINFT is ERC721, Ownable {
         bool breedingAvailable;
         bool injured;
         bool retired;
-        string encryptedURI;   // 0G storage pointer / rootHash
+        string encryptedURI; // 0G storage pointer / rootHash
         bytes32 metadataHash;
     }
 
@@ -44,12 +44,10 @@ contract HorseINFT is ERC721, Ownable {
         breedingMarketplace = _marketplace;
     }
 
-    function mint(
-        address to,
-        string calldata encryptedURI_,
-        bytes32 metadataHash_,
-        HorseData calldata data_
-    ) external returns (uint256 tokenId) {
+    function mint(address to, string calldata encryptedURI_, bytes32 metadataHash_, HorseData calldata data_)
+        external
+        returns (uint256 tokenId)
+    {
         require(msg.sender == owner() || msg.sender == breedingMarketplace, "Not minter");
         tokenId = _nextTokenId++;
         _safeMint(to, tokenId);
@@ -75,7 +73,9 @@ contract HorseINFT is ERC721, Ownable {
     function authorizeUsage(uint256 tokenId, address executor, bytes calldata) external {
         require(ownerOf(tokenId) == msg.sender, "Not owner");
         address[] storage users = authorizedUsers[tokenId];
-        for (uint256 i = 0; i < users.length; i++) if (users[i] == executor) return;
+        for (uint256 i = 0; i < users.length; i++) {
+            if (users[i] == executor) return;
+        }
         users.push(executor);
         emit Authorization(msg.sender, executor, tokenId);
     }
@@ -95,7 +95,9 @@ contract HorseINFT is ERC721, Ownable {
 
     function isAuthorized(uint256 tokenId, address user) public view returns (bool) {
         address[] storage users = authorizedUsers[tokenId];
-        for (uint256 i = 0; i < users.length; i++) if (users[i] == user) return true;
+        for (uint256 i = 0; i < users.length; i++) {
+            if (users[i] == user) return true;
+        }
         return false;
     }
 

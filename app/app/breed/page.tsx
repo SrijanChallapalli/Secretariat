@@ -5,6 +5,7 @@ import { useAccount, useChainId, useReadContracts, useWriteContract, useSignType
 import { addresses, abis } from "@/lib/contracts";
 import { useState } from "react";
 import { scoreStallions, type HorseTraits, type Recommendation } from "@/lib/breeding-advisor";
+import { scoreStallionsSAgent } from "@/lib/s-agent";
 import { encodeAbiParameters, parseAbiParameters, keccak256, toHex } from "viem";
 
 const BREEDING_PLAN_TYPE = {
@@ -24,6 +25,8 @@ export default function BreedPage() {
   const searchParams = useSearchParams();
   const stallionParam = searchParams.get("stallion");
   const advisorMode = searchParams.get("advisor") === "1";
+  const sAgentMode = searchParams.get("agent") === "s-agent";
+  const advisorActive = advisorMode || sAgentMode;
   const chainId = useChainId();
   const { address } = useAccount();
   const [mareId, setMareId] = useState(stallionParam ? "" : "1");
@@ -68,7 +71,8 @@ export default function BreedPage() {
 
   const getRecommendations = () => {
     if (!mare) return;
-    const recs = scoreStallions(mare, stallions, 1000n * BigInt(1e18));
+    const maxFee = 1000n * BigInt(1e18);
+    const recs = sAgentMode ? scoreStallionsSAgent(mare, stallions, maxFee) : scoreStallions(mare, stallions, maxFee);
     setPicks(recs);
   };
 
@@ -129,13 +133,13 @@ export default function BreedPage() {
               onChange={(e) => setMareId(e.target.value)}
             />
           </div>
-          {advisorMode && (
+          {advisorActive && (
             <div className="mb-6">
               <button
                 onClick={getRecommendations}
                 className="px-4 py-2 rounded bg-gold-500 text-track-800 font-medium"
               >
-                Get top 3 breeding picks
+                Get top 3 breeding picks {sAgentMode ? "(S-Agent)" : "(Breeding Advisor)"}
               </button>
               {picks && (
                 <ul className="mt-4 space-y-3">

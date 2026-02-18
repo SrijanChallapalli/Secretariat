@@ -9,6 +9,7 @@ import multer from "multer";
 import fs from "fs";
 import { uploadRoute } from "./og-upload.js";
 import { downloadRoute } from "./og-download.js";
+import { valuationRoute } from "./valuation-route.js";
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,7 @@ const upload = multer({ dest: "uploads/", limits: { fileSize: 100 * 1024 * 1024 
 
 app.post("/og/upload", upload.single("file"), uploadRoute);
 app.get("/og/download/:rootHash", downloadRoute);
+app.post("/valuation/calculate", valuationRoute);
 
 const PORT = process.env.PORT ?? 4000;
 app.listen(PORT, () => console.log(`Secretariat server on http://localhost:${PORT}`));

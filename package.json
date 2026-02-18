@@ -7,8 +7,10 @@
     "server"
   ],
   "scripts": {
+    "check": "npm run build --workspaces --if-present && cd contracts && forge build && forge fmt --check .",
     "build": "npm run build --workspaces --if-present",
-    "deploy:og": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_0G --broadcast",
+    "lint": "npm run lint --workspaces --if-present",
+    "deploy:og": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_0G --broadcast --with-gas-price 3000000000 --priority-gas-price 2000000000",
     "deploy:adi": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_ADI --broadcast",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "demo:reset": "tsx scripts/demo-reset.ts",

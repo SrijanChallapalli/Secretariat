@@ -38,21 +38,12 @@ contract BreedingMarketplace is Ownable {
         horseNFT = HorseINFT(_horseNFT);
     }
 
-    function list(
-        uint256 stallionId,
-        uint256 studFeeADI,
-        uint256 maxUses,
-        bool useAllowlist_
-    ) external {
+    function list(uint256 stallionId, uint256 studFeeADI, uint256 maxUses, bool useAllowlist_) external {
         require(horseNFT.ownerOf(stallionId) == msg.sender, "Not owner");
         HorseINFT.HorseData memory h = horseNFT.getHorseData(stallionId);
         require(h.breedingAvailable && !h.injured && !h.retired, "Not available");
         listings[stallionId] = Listing({
-            studFeeADI: studFeeADI,
-            maxUses: maxUses,
-            usedCount: 0,
-            useAllowlist: useAllowlist_,
-            active: true
+            studFeeADI: studFeeADI, maxUses: maxUses, usedCount: 0, useAllowlist: useAllowlist_, active: true
         });
         emit Listed(stallionId, studFeeADI, maxUses, useAllowlist_);
     }
@@ -90,12 +81,10 @@ contract BreedingMarketplace is Ownable {
         return breedingRightExpiry[stallionId][user] > block.timestamp;
     }
 
-    function breed(
-        uint256 stallionId,
-        uint256 mareId,
-        string calldata offspringName,
-        bytes32 salt
-    ) external returns (uint256 offspringId) {
+    function breed(uint256 stallionId, uint256 mareId, string calldata offspringName, bytes32 salt)
+        external
+        returns (uint256 offspringId)
+    {
         require(horseNFT.ownerOf(mareId) == msg.sender, "Not mare owner");
         require(hasBreedingRight(stallionId, msg.sender), "No breeding right");
 

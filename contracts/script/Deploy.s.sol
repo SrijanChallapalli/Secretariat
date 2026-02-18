@@ -27,12 +27,8 @@ contract DeployScript is Script {
         HorseSyndicateVaultFactory vaultFactory = new HorseSyndicateVaultFactory(address(adi), address(horseNFT));
 
         BreedingAdvisorINFT agentINFT = new BreedingAdvisorINFT();
-        AgentExecutor agentExecutor = new AgentExecutor(
-            address(agentINFT),
-            address(marketplace),
-            address(horseNFT),
-            address(adi)
-        );
+        AgentExecutor agentExecutor =
+            new AgentExecutor(address(agentINFT), address(marketplace), address(horseNFT), address(adi));
 
         vm.stopBroadcast();
 

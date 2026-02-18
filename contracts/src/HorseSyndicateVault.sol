@@ -22,16 +22,10 @@ contract HorseSyndicateVault is ERC20, Ownable, ReentrancyGuard {
     event RevenueDeposited(uint256 amount);
     event RevenueClaimed(address holder, uint256 amount);
 
-    constructor(
-        address _adi,
-        address _horseNFT,
-        uint256 _horseTokenId,
-        uint256 _totalShares,
-        uint256 _sharePriceADI
-    ) ERC20(
-        string(abi.encodePacked("HorseShare_", _horseTokenId)),
-        string(abi.encodePacked("SHARE", _horseTokenId))
-    ) Ownable(msg.sender) {
+    constructor(address _adi, address _horseNFT, uint256 _horseTokenId, uint256 _totalShares, uint256 _sharePriceADI)
+        ERC20(string(abi.encodePacked("HorseShare_", _horseTokenId)), string(abi.encodePacked("SHARE", _horseTokenId)))
+        Ownable(msg.sender)
+    {
         adi = IERC20(_adi);
         horseNFT = HorseINFT(_horseNFT);
         horseTokenId = _horseTokenId;

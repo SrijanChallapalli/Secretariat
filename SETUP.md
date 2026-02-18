@@ -64,7 +64,7 @@ export RPC_URL=https://evmrpc-testnet.0g.ai
 npm run seed:demo
 ```
 
-Uses `DEPLOYER_PRIVATE_KEY` and `NEXT_PUBLIC_*` (or `ADI_TOKEN`, `HORSE_INFT`, etc.) from `.env`. Mints ADI, 3 horses, lists stallions, mints Agent iNFT.
+Uses `DEPLOYER_PRIVATE_KEY` and `NEXT_PUBLIC_*` (or `ADI_TOKEN`, `HORSE_INFT`, etc.) from `.env`. Mints ADI, 3 horses, lists stallions, mints Breeding Advisor iNFT (token 0) and S-Agent iNFT (token 1).
 
 ---
 

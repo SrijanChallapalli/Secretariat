@@ -104,6 +104,19 @@ async function main() {
     args: [owner, "", h2.metadataHash, h2],
   });
   console.log("Minted horses 0, 1, 2. Tx:", tx0, tx1, tx2);
+  async function waitReceipt(hash: `0x${string}`, label: string) {
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
+      try {
+        const r = await publicClient.getTransactionReceipt({ hash });
+        if (r) { console.log(`${label} confirmed (block ${r.blockNumber})`); return r; }
+      } catch { /* not mined yet */ }
+    }
+    console.warn(`${label}: gave up waiting, continuing anyway`);
+  }
+  await waitReceipt(tx0, "Horse 0");
+  await waitReceipt(tx1, "Horse 1");
+  await waitReceipt(tx2, "Horse 2");
 
   // List stallions 0 and 2 for breeding
   await (wallet as any).writeContract({
@@ -121,13 +134,24 @@ async function main() {
   console.log("Listed stallions 0 (500 ADI) and 2 (300 ADI)");
 
   if (agentAddr) {
-    await (wallet as any).writeContract({
-      address: agentAddr as `0x${string}`,
-      abi: abi.BreedingAdvisorINFT,
-      functionName: "mint",
-      args: [owner, { name: "Secretariat Breeding Advisor", version: "1.0", specialization: "breeding", modelBundleRootHash: "" }],
-    });
-    console.log("Minted Breeding Advisor iNFT to owner");
+    try {
+      await (wallet as any).writeContract({
+        address: agentAddr as `0x${string}`,
+        abi: abi.BreedingAdvisorINFT,
+        functionName: "mint",
+        args: [owner, { name: "Secretariat Breeding Advisor", version: "1.0", specialization: "breeding", modelBundleRootHash: "" }],
+      });
+      console.log("Minted Breeding Advisor iNFT (token 0) to owner");
+      await (wallet as any).writeContract({
+        address: agentAddr as `0x${string}`,
+        abi: abi.BreedingAdvisorINFT,
+        functionName: "mint",
+        args: [owner, { name: "S-Agent", version: "1.0", specialization: "breeding-synergy", modelBundleRootHash: "" }],
+      });
+      console.log("Minted S-Agent iNFT (token 1) to owner");
+    } catch (e) {
+      console.warn("Agent iNFT mint skipped:", (e as Error).message);
+    }
   }
 
   console.log("Seed done. Owner can list/sell; use second wallet as Buyer to purchase breeding rights and breed.");

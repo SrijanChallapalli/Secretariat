@@ -18,6 +18,11 @@ contracts/broadcast/*/31337/
 contracts/broadcast/*/16602/
 contracts/broadcast/*/99999/
 
+# Build output
+server/dist/
+*.tsbuildinfo
+
 # Logs and OS
 *.log
 .DS_Store
+s-agent-repo/

@@ -15,8 +15,8 @@ const CONTRACT_KEYS = [
   "NEXT_PUBLIC_AGENT_INFT",
   "NEXT_PUBLIC_AGENT_EXECUTOR",
 ];
-// Broadcast order: MockADI, MockINFTOracle, HorseINFT, BreedingMarketplace, HorseOracle, VaultFactory, AgentINFT, AgentExecutor
-const TX_INDEX_MAP = [0, 2, 3, 4, 5, 6, 7]; // skip index 1 (MockINFTOracle)
+// Broadcast order: MockADI(0), MockINFTOracle(1), HorseINFT(2), BreedingMarketplace(3), CALL(4), HorseOracle(5), VaultFactory(6), AgentINFT(7), AgentExecutor(8)
+const TX_INDEX_MAP = [0, 2, 3, 5, 6, 7, 8]; // skip 1 (MockINFTOracle), 4 (CALL not CREATE)
 
 const chainId = process.argv[2] ?? "16602";
 const repoRoot = path.resolve(process.cwd());

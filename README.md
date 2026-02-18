@@ -10,7 +10,7 @@ One codebase, dual deployment: **0G Galileo Testnet** (demo) and **ADI AB Testne
 - **Horse iNFT:** Pedigree links, trait vector, valuation, DNA hash, encryptedURI (0G pointer).
 - **Fractional ownership:** Vault per horse; buy shares; claimable revenue.
 - **Breeding rights:** List stallion → buyer purchases right with ADI → breed to mint offspring.
-- **Breeding Advisor Agent:** Top 3 recommendations + explainability; optional “Execute with approval” (EIP-712 signed plan).
+- **Agents (Breeding Advisor + S-Agent + Horse Valuation Agent):** Top 3 recommendations + explainability; optional “Execute with approval” (EIP-712 signed plan).
 - **Oracle:** Admin/oracle reports race result, injury, news → valuation updates.
 - **0G:** Real upload of agent model bundle to 0G Storage; rootHash stored in agent iNFT; app retrieves bundle.
 
@@ -18,7 +18,7 @@ One codebase, dual deployment: **0G Galileo Testnet** (demo) and **ADI AB Testne
 
 - **`/contracts`** — Foundry + OpenZeppelin (MockADI, HorseINFT, BreedingMarketplace, HorseSyndicateVault + Factory, HorseOracle, BreedingAdvisorINFT, AgentExecutor, MockINFTOracle).
 - **`/app`** — Next.js 14, TypeScript, Tailwind, wagmi, RainbowKit.
-- **`/server`** — Node/TS minimal API: `POST /og/upload`, `GET /og/download/:rootHash` (0G Storage).
+- **`/server`** — Node/TS API: `POST /og/upload`, `GET /og/download/:rootHash` (0G Storage), `POST /valuation/calculate` (Horse Valuation Agent).
 
 ## Setup
 
@@ -68,17 +68,17 @@ MetaMask: add both networks; switch via RainbowKit/header (“0G Demo” / “AD
 - **BreedingMarketplace** — list(stallionId, studFee, maxUses, useAllowlist); purchaseBreedingRight(stallionId, seed); breed(stallionId, mareId, offspringName, salt). Deterministic genetics (seed/salt).
 - **HorseSyndicateVault** — Per-horse ERC20 shares; buyShares; depositRevenue; claim pro-rata.
 - **HorseOracle** — reportRaceResult, reportInjury, reportNews (ORACLE_ROLE); updates HorseINFT valuation.
-- **BreedingAdvisorINFT** — Agent iNFT with profile (name, version, specialization, modelBundleRootHash).
+- **BreedingAdvisorINFT** — Agent iNFT with profile (name, version, specialization, modelBundleRootHash). Token 0: Breeding Advisor; Token 1: S-Agent (pedigree synergy + complement). Horse Valuation Agent is off-chain (see `app/lib/horse-valuation-agent.ts`, `server/bundle/valuation-agent/`); when oracle reports race/injury/news, call `POST /valuation/calculate` for agent-suggested USD value.
 - **AgentExecutor** — EIP-712 BreedingPlan; execute(plan, offspringName, salt, purchaseSeed, signature) enforces budget/rights and calls marketplace.
 
 ## 0G Storage
 
-- **Upload:** App or server builds a model bundle (dataset.json, weights.json, model_card.md, evaluation.json, agent_code.ts) ≥10MB (pad if needed), POST to `/og/upload` → returns `rootHash`, `txHash`. Store `rootHash` in agent iNFT (mint or updateModelBundle).
+- **Upload:** App or server builds a model bundle (dataset.json, weights.json, model_card.md, evaluation.json, agent_code.ts or s-agent_code.ts or valuation_agent_code.ts) ≥10MB (pad if needed), POST to `/og/upload` → returns `rootHash`, `txHash`. Store `rootHash` in agent iNFT (mint or updateModelBundle). Bundles: `server/bundle/` (Breeding Advisor), `server/bundle/s-agent/` (S-Agent), `server/bundle/valuation-agent/` (Horse Valuation Agent).
 - **Download:** GET `/og/download/:rootHash` streams file. “Refresh from 0G” in UI uses this to show bundle version/contents.
 
 ## Agent guardrails
 
-- **Recommend-only (default):** UI runs scoring locally; shows Top 3 + explainability; no on-chain execution.
+- **Recommend-only (default):** UI runs scoring locally; shows Top 3 + explainability; no on-chain execution. S-Agent uses `/breed?agent=s-agent`; Breeding Advisor uses `/breed?advisor=1`.
 - **Execute with approval:** User signs EIP-712 BreedingPlan (budget, maxStudFee, mare, chosenStallion, deadline, traitFloor). AgentExecutor checks signature and constraints, then purchaseBreedingRight (if needed) + breed.
 
 ## 5-minute judge demo script
@@ -91,9 +91,10 @@ MetaMask: add both networks; switch via RainbowKit/header (“0G Demo” / “AD
 
 ## Scripts
 
+- `check` — Build all workspaces, then `cd contracts && forge build && forge fmt --check .` (quality gate).
 - `deploy:og` — Deploy to 0G Galileo.
 - `deploy:adi` — Deploy to ADI AB Testnet.
-- `seed:demo` — Mint ADI, mint horses, list stallions, mint agent iNFT (set env addresses).
+- `seed:demo` — Mint ADI, mint horses, list stallions, mint Breeding Advisor iNFT (token 0) + S-Agent iNFT (token 1) (set env addresses).
 - `demo:reset` — Placeholder (redeploy for clean state).
 
 ## License
