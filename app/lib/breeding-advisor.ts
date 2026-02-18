@@ -1,12 +1,16 @@
 /**
- * Breeding Advisor scoring engine (hackathon-credible, explainable).
- * compatibility = w_traits * cosine_similarity(traits) + w_pedigree * pedigree_synergy - w_inbreeding * inbreeding_score - w_cost * normalized_fee + w_form * performance_proxy
+ * Breeding Advisor scoring engine.
+ *
+ * Combines trait compatibility, pedigree synergy, complementary trait fill,
+ * cost, and form into a single score. When the server is available, the breed
+ * page may call POST /breeding/recommend for XGBoost-enhanced scoring; this
+ * module serves as the offline / client-side fallback.
  */
 
-const TRAIT_NAMES = ["speed", "stamina", "temperament", "conformation", "health", "agility", "raceIQ", "consistency"];
-const W_TRAITS = 0.35;
+const W_TRAITS = 0.30;
 const W_PEDIGREE = 0.25;
-const W_INBREEDING = 0.2;
+const W_COMPLEMENT = 0.15;
+const W_INBREEDING = 0.10;
 const W_COST = 0.15;
 const W_FORM = 0.05;
 
@@ -39,8 +43,20 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return den === 0 ? 0 : dot / den;
 }
 
-function inbreedingScore(sireId: number, damId: number, stallionId: number): number {
-  if (stallionId === sireId || stallionId === damId) return 1;
+function complementScore(mareTraits: number[], stallionTraits: number[]): number {
+  if (mareTraits.length !== stallionTraits.length) return 0;
+  let sum = 0, count = 0;
+  for (let i = 0; i < mareTraits.length; i++) {
+    if (mareTraits[i] / 100 < 0.8) {
+      sum += stallionTraits[i] / 100;
+      count++;
+    }
+  }
+  return count === 0 ? 0.5 : sum / count;
+}
+
+function inbreedingScore(_sireId: number, _damId: number, _stallionId: number): number {
+  if (_stallionId === _sireId || _stallionId === _damId) return 1;
   return 0;
 }
 
@@ -52,6 +68,7 @@ export function scoreStallions(
   const results: Recommendation[] = stallions.map((stallion) => {
     const traitMatch = cosineSimilarity(mare.traitVector, stallion.traitVector);
     const pedigreeSynergy = (mare.pedigreeScore / 10000 + stallion.pedigreeScore / 10000) / 2;
+    const complement = complementScore(mare.traitVector, stallion.traitVector);
     const inbreedingRisk = 0;
     const fee = Number(stallion.studFeeADI ?? 0) / 1e18;
     const maxFee = maxStudFee ? Number(maxStudFee) / 1e18 : 10000;
@@ -60,7 +77,8 @@ export function scoreStallions(
 
     const score =
       W_TRAITS * (traitMatch * 0.5 + 0.5) +
-      W_PEDIGREE * pedigreeSynergy -
+      W_PEDIGREE * pedigreeSynergy +
+      W_COMPLEMENT * complement -
       W_INBREEDING * inbreedingRisk -
       W_COST * costPenalty +
       W_FORM * formBonus;
@@ -69,6 +87,8 @@ export function scoreStallions(
     if (stallion.injured) riskFlags.push("Injury");
     if (fee > maxFee * 0.8) riskFlags.push("High fee");
     if (traitMatch < 0.3) riskFlags.push("Low trait match");
+    if (complement < 0.4) riskFlags.push("Low trait complement");
+    if (pedigreeSynergy < 0.7) riskFlags.push("Pedigree mismatch");
 
     return {
       stallionTokenId: stallion.tokenId,

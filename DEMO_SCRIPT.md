@@ -29,10 +29,10 @@
 
 ---
 
-## 4. 0G Storage & agent iNFT (1 min)
-- **Agent** page: show **Agent identity** (name, version, model bundle rootHash).
-- Say: “Model bundle is uploaded to 0G Storage; rootHash is stored in the agent iNFT.”
-- “Refresh from 0G”: paste rootHash (or use one from a previous upload), click **Download bundle** → file downloads from server (server calls 0G indexer.download). “So the app really retrieves the bundle from 0G.”
+## 4. XGBoost model & valuation (1 min)
+- **Agent** page: show **Breeding Advisor** and **Horse Valuation Agent** — both powered by Secretariat’s XGBoost model.
+- Say: “Model is trained on real thoroughbred racing data; predicts prize earnings and offspring potential.”
+- Go to **Horse #0** → show **Horse Valuation Agent** section with USD value breakdown.
 
 ---
 
@@ -43,4 +43,4 @@
 ---
 
 ## Closing (30 s)
-- “One codebase, two networks; RWA market efficiency; AI guardrails with user-signed execution; on-chain agent ownership; composable contracts; 0G for model artifacts.”
+- “One codebase, two networks; RWA market efficiency; AI guardrails with user-signed execution; XGBoost-powered agents; composable contracts; 0G for model artifacts.”

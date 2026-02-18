@@ -10,6 +10,7 @@ import {
   calculateCD,
   classifyDistance,
 } from "../../shared/dosage.js";
+import { XGBoostPredictor, type HorseInput } from "./xgboost-predictor.js";
 
 export type { FeatureVector, ValuationResult, ValuationEngine, MarketData };
 
@@ -129,21 +130,94 @@ export class FormulaEngine implements ValuationEngine {
 }
 
 // ---------------------------------------------------------------------------
-// ModelEngine (stub)
+// ModelEngine — XGBoost-backed valuation
 // ---------------------------------------------------------------------------
+
+function featuresToXGBInput(f: FeatureVector): HorseInput {
+  const races = f.totalRaces ?? 0;
+  const wins = f.wins ?? 0;
+  const age =
+    f.age ??
+    (f.birthTimestamp > 0
+      ? Math.floor((Date.now() / 1000 - f.birthTimestamp) / (365.25 * 24 * 3600))
+      : 3);
+
+  const sexMap: Record<string, string> = { male: "C", female: "F" };
+  const sex = f.sex ? (sexMap[f.sex] ?? "G") : "G";
+
+  return {
+    raceCount: races,
+    winCount: wins,
+    placeCount: Math.round(wins * 1.8),
+    avgPosition: races > 0 ? (wins > 0 ? Math.max(1, 5 - (wins / races) * 4) : 6) : 0,
+    stdPosition: 2.5,
+    bestPosition: wins > 0 ? 1 : 3,
+    worstPosition: races > 0 ? Math.min(races, 12) : 0,
+    avgNormPosition: races > 0 ? 0.4 : 0,
+    avgFieldSize: 8,
+    avgSp: 10,
+    minSp: 3,
+    avgWeight: 128,
+    avgDistance: 8,
+    stdDistance: 2,
+    avgOfficialRating: f.speedFigures?.length
+      ? f.speedFigures.reduce((a, b) => a + b, 0) / f.speedFigures.length
+      : (f.speed ?? 0) * 1.2,
+    maxOfficialRating: f.speedFigures?.length
+      ? Math.max(...f.speedFigures)
+      : (f.speed ?? 0) * 1.3,
+    age,
+    avgClass: Math.max(1, 6 - (f.pedigreeScore ?? 0) / 2000),
+    bestClass: Math.max(1, 5 - (f.pedigreeScore ?? 0) / 2500),
+    surfacePctTurf: 1,
+    sex,
+  };
+}
 
 export class ModelEngine implements ValuationEngine {
   private formula = new FormulaEngine();
+  private predictor: XGBoostPredictor | null = null;
   private bundlePath?: string;
 
   constructor(bundlePath?: string) {
     this.bundlePath = bundlePath;
+    try {
+      this.predictor = new XGBoostPredictor();
+    } catch {
+      console.warn("ModelEngine: XGBoost model not found, will fall back to formula.");
+    }
   }
 
   predict(features: FeatureVector, marketData?: MarketData): ValuationResult {
-    console.log("ModelEngine: falling back to formula (model not loaded)");
-    const result = this.formula.predict(features, marketData);
-    return { ...result, engineVersion: "model-v1-stub" };
+    if (!this.predictor) {
+      const result = this.formula.predict(features, marketData);
+      return { ...result, engineVersion: "model-v1-fallback" };
+    }
+
+    const input = featuresToXGBInput(features);
+    const mlValueGBP = this.predictor.predict(input);
+
+    const formulaResult = this.formula.predict(features, marketData);
+
+    // ML model predicts GBP prize earnings; formula produces ADI-scale values.
+    // Use the ML prediction as a relative signal: compute a multiplier from the
+    // ML-predicted earning power (median training set is ~£2,500) and apply it
+    // to the formula base, clamped to a reasonable range.
+    const mlMedian = 2500;
+    const mlRatio = Math.max(0.1, Math.min(10, mlValueGBP / mlMedian));
+    const adjustedValue = formulaResult.value * (0.4 + 0.6 * mlRatio);
+
+    return {
+      value: adjustedValue,
+      confidence: 0.85,
+      breakdown: {
+        ...formulaResult.breakdown,
+        mlPredictionGBP: mlValueGBP,
+        mlRatio,
+        formulaPrediction: formulaResult.value,
+      },
+      engineVersion: `model-v1-xgb-${this.predictor.treeCount()}t`,
+    };
   }
 
   adjustForEvent(
@@ -152,9 +226,22 @@ export class ModelEngine implements ValuationEngine {
     eventData: Record<string, unknown>,
     marketData?: MarketData,
   ): ValuationResult {
-    console.log("ModelEngine: falling back to formula (model not loaded)");
-    const result = this.formula.adjustForEvent(features, eventType, eventData, marketData);
-    return { ...result, engineVersion: "model-v1-stub" };
+    const basePrediction = this.predict(features, marketData);
+    const formulaAdj = this.formula.adjustForEvent(features, eventType, eventData, marketData);
+    const formulaBase = this.formula.predict(features, marketData);
+
+    const eventMultiplier =
+      formulaBase.value > 0 ? formulaAdj.value / formulaBase.value : 1.0;
+
+    return {
+      value: basePrediction.value * eventMultiplier,
+      confidence: 0.8,
+      breakdown: {
+        ...basePrediction.breakdown,
+        eventMultiplier,
+      },
+      engineVersion: basePrediction.engineVersion,
+    };
   }
 
   async loadModel(bundlePath: string): Promise<void> {
@@ -162,7 +249,9 @@ export class ModelEngine implements ValuationEngine {
   }
 
   version(): string {
-    return "model-v1-stub";
+    return this.predictor
+      ? `model-v1-xgb-${this.predictor.treeCount()}t`
+      : "model-v1-fallback";
   }
 }
 

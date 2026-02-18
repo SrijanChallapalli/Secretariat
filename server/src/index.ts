@@ -9,6 +9,7 @@ import fs from "fs";
 import { uploadRoute } from "./og-upload.js";
 import { downloadRoute } from "./og-download.js";
 import { valuationRoute } from "./valuation-route.js";
+import { breedingRoute } from "./breeding-route.js";
 import { startIndexer, getTrainingData } from "./event-indexer.js";
 import { getPredictions, getAccuracy } from "./prediction-log.js";
 
@@ -21,6 +22,7 @@ const upload = multer({ dest: "uploads/", limits: { fileSize: 100 * 1024 * 1024 
 app.post("/og/upload", upload.single("file"), uploadRoute);
 app.get("/og/download/:rootHash", downloadRoute);
 app.post("/valuation/calculate", valuationRoute);
+app.post("/breeding/recommend", breedingRoute);
 
 app.get("/training/events", (_req, res) => {
   try {

@@ -28,4 +28,3 @@ server/dist/
 # Logs and OS
 *.log
 .DS_Store
-s-agent-repo/

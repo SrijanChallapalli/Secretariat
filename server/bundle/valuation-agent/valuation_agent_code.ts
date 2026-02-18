@@ -1,6 +1,6 @@
 /**
  * Horse Valuation Agent - 0G bundle code (verification).
- * Same formulas as app/lib/horse-valuation-agent.ts and S-Agent HorseValuationAgent.js.
+ * Same formulas as app/lib/horse-valuation-agent.ts.
  * Racing value = (totalEarnings*2) + (winRate*100000) + (speed*1000)
  * Breeding value = (pedigreeScore*2000) + offspringWins*5000; male 1.2x
  * Events: RACE_WIN (+25% G1), INJURY (severity 0-10), etc.

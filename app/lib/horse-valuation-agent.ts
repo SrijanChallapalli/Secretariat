@@ -1,5 +1,5 @@
 /**
- * Horse Valuation Agent (S-Agent spec).
+ * Horse Valuation Agent.
  * Complementary to Breeding Advisor: computes USD valuation from racing + breeding + modifiers.
  * Inputs: horse data (age, sex, status, traits, racing record, breeding) + market data.
  * Events: RACE_WIN, RACE_LOSS, INJURY, RETIREMENT, OFFSPRING_WIN, DEATH.
@@ -77,7 +77,7 @@ function getStatusModifier(status: string | undefined): number {
 }
 
 /**
- * Core valuation formula (matches S-Agent HorseValuationAgent.js).
+ * Core valuation formula.
  * Racing value = (totalEarnings * 2) + (winRate * 100000) + (speed * 1000)
  * Breeding value = (pedigreeScore * 2000) + offspringSuccessBonus; sex adjustment for male 1.2x
  * Modifiers: age (peak 3–6), health (0.5–1.0), status, market (bullish +10%).

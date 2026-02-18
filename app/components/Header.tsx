@@ -17,33 +17,64 @@ export function Header() {
   return (
     <>
       {needsWalletConnectId && (
-        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 text-center text-sm text-amber-200">
-          Connect button needs a WalletConnect project ID. Add <code className="bg-black/20 px-1 rounded">NEXT_PUBLIC_WALLETCONNECT_ID</code> (32 chars) from{" "}
-          <a href="https://cloud.walletconnect.com" target="_blank" rel="noopener noreferrer" className="underline">cloud.walletconnect.com</a> to your <code className="bg-black/20 px-1 rounded">.env</code> and rebuild. MetaMask still works via &quot;Injected&quot; in the modal.
+        <div className="bg-terminal-amber/10 border-b border-terminal-amber/30 px-4 py-1.5 text-center text-xs text-terminal-amber">
+          Connect button needs a WalletConnect project ID. Add{" "}
+          <code className="bg-secondary px-1 rounded-sm">
+            NEXT_PUBLIC_WALLETCONNECT_ID
+          </code>{" "}
+          (32 chars) from{" "}
+          <a
+            href="https://cloud.walletconnect.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            cloud.walletconnect.com
+          </a>{" "}
+          to your{" "}
+          <code className="bg-secondary px-1 rounded-sm">.env</code> and
+          rebuild. MetaMask still works via &quot;Injected&quot; in the modal.
         </div>
       )}
-      <header className="border-b border-track-600 bg-track-800/80 sticky top-0 z-50 backdrop-blur">
-        <div className="container mx-auto px-4 flex items-center justify-between h-16">
-          <Link href="/" className="text-xl font-semibold text-gold-400 tracking-tight">
+      <header className="border-b border-border bg-background/95 sticky top-0 z-50 backdrop-blur">
+        <div className="container mx-auto px-4 flex items-center justify-between h-14">
+          <Link
+            href="/"
+            className="text-lg font-semibold text-prestige-gold tracking-tight"
+          >
             Secretariat
           </Link>
-          <nav className="flex items-center gap-6">
-            <Link href="/marketplace" className="text-stone-300 hover:text-white">
+          <nav className="flex items-center gap-5 text-sm">
+            <Link
+              href="/marketplace"
+              className="text-muted-foreground hover:text-foreground"
+            >
               Marketplace
             </Link>
-            <Link href="/portfolio" className="text-stone-300 hover:text-white">
+            <Link
+              href="/portfolio"
+              className="text-muted-foreground hover:text-foreground"
+            >
               Portfolio
             </Link>
-            <Link href="/agent" className="text-stone-300 hover:text-white">
+            <Link
+              href="/agent"
+              className="text-muted-foreground hover:text-foreground"
+            >
               Agent
             </Link>
-            <Link href="/admin" className="text-stone-500 hover:text-stone-400 text-sm">
+            <Link
+              href="/admin"
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
               Admin
             </Link>
-            <span className="text-sm text-stone-500">
+            <span className="text-xs text-muted-foreground font-mono">
               {chainNames[chainId] ?? `Chain ${chainId}`}
             </span>
-            <ConnectButton />
+            <div className="ml-2">
+              <ConnectButton />
+            </div>
           </nav>
         </div>
       </header>

@@ -40,23 +40,93 @@ export default function VaultPage() {
 
   const { writeContract } = useWriteContract();
 
-  if (!vault) return <p className="text-stone-500">No vault for horse #{id}. Create one from the horse page.</p>;
+  if (!vault)
+    return (
+      <p className="text-sm text-muted-foreground">
+        No vault for horse #{id}. Create one from the horse page.
+      </p>
+    );
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gold-400 mb-6">Vault — Horse #{id}</h1>
-      <div className="rounded-xl border border-track-600 bg-track-700 p-5 mb-6 space-y-2">
-        <p>TVL: {tvl != null ? formatEther(tvl as bigint) : "—"} ADI</p>
-        <p>Total shares: {totalShares != null ? String(totalShares) : "—"}</p>
-        <p>Share price: {sharePrice != null ? formatEther(sharePrice as bigint) : "—"} ADI</p>
-        {address && <p>My shares: {myBalance != null ? String(myBalance) : "—"} · Claimable: {claimable != null ? formatEther(claimable as bigint) : "—"} ADI</p>}
-      </div>
+    <div className="space-y-6 max-w-3xl">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-wide text-foreground">
+          Vault — Horse #{id}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Fractional ownership vault backed by this horse&apos;s ADI flows.
+        </p>
+      </header>
+      <section className="rounded-sm border border-border bg-card p-4 space-y-2 text-sm">
+        <p>
+          TVL:{" "}
+          <span className="font-mono">
+            {tvl != null ? formatEther(tvl as bigint) : "—"} ADI
+          </span>
+        </p>
+        <p>
+          Total shares:{" "}
+          <span className="font-mono">
+            {totalShares != null ? String(totalShares) : "—"}
+          </span>
+        </p>
+        <p>
+          Share price:{" "}
+          <span className="font-mono">
+            {sharePrice != null ? formatEther(sharePrice as bigint) : "—"} ADI
+          </span>
+        </p>
+        {address && (
+          <p>
+            My shares:{" "}
+            <span className="font-mono">
+              {myBalance != null ? String(myBalance) : "—"}
+            </span>{" "}
+            · Claimable:{" "}
+            <span className="font-mono">
+              {claimable != null
+                ? formatEther(claimable as bigint)
+                : "—"}{" "}
+              ADI
+            </span>
+          </p>
+        )}
+      </section>
       {address && (
-        <div className="flex flex-wrap gap-4">
-          <input type="number" min={1} className="w-24 px-3 py-2 rounded bg-track-800 border border-track-600" value={shares} onChange={(e) => setShares(e.target.value)} />
-          <button className="px-4 py-2 rounded bg-gold-500 text-track-800" onClick={() => writeContract({ address: vault as `0x${string}`, abi: vaultAbi, functionName: "buyShares", args: [BigInt(shares)] })}>Buy shares</button>
-          <button className="px-4 py-2 rounded border border-gold-500/50 text-gold-400" onClick={() => writeContract({ address: vault as `0x${string}`, abi: vaultAbi, functionName: "claim" })}>Claim</button>
-        </div>
+        <section className="flex flex-wrap gap-3 items-center">
+          <input
+            type="number"
+            min={1}
+            className="w-24 px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
+            value={shares}
+            onChange={(e) => setShares(e.target.value)}
+          />
+          <button
+            className="px-4 py-2 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            onClick={() =>
+              writeContract({
+                address: vault as `0x${string}`,
+                abi: vaultAbi,
+                functionName: "buyShares",
+                args: [BigInt(shares)],
+              })
+            }
+          >
+            Buy shares
+          </button>
+          <button
+            className="px-4 py-2 rounded-sm border border-border text-prestige-gold text-sm hover:bg-secondary/60 transition-colors"
+            onClick={() =>
+              writeContract({
+                address: vault as `0x${string}`,
+                abi: vaultAbi,
+                functionName: "claim",
+              })
+            }
+          >
+            Claim
+          </button>
+        </section>
       )}
     </div>
   );

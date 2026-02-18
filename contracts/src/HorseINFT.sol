@@ -9,6 +9,7 @@ import "./MockINFTOracle.sol";
 contract HorseINFT is ERC721, Ownable {
     MockINFTOracle public oracle;
     address public breedingMarketplace;
+    address public horseOracle;
 
     struct HorseData {
         string name;
@@ -42,6 +43,10 @@ contract HorseINFT is ERC721, Ownable {
 
     function setBreedingMarketplace(address _marketplace) external onlyOwner {
         breedingMarketplace = _marketplace;
+    }
+
+    function setHorseOracle(address _oracle) external onlyOwner {
+        horseOracle = _oracle;
     }
 
     function mint(address to, string calldata encryptedURI_, bytes32 metadataHash_, HorseData calldata data_)
@@ -115,7 +120,12 @@ contract HorseINFT is ERC721, Ownable {
         _transfer(from, to, tokenId);
     }
 
-    function updateValuation(uint256 tokenId, uint256 newVal) external onlyOwner {
+    modifier onlyOwnerOrOracle() {
+        require(msg.sender == owner() || msg.sender == horseOracle, "Not owner or oracle");
+        _;
+    }
+
+    function updateValuation(uint256 tokenId, uint256 newVal) external onlyOwnerOrOracle {
         uint256 oldVal = horses[tokenId].valuationADI;
         horses[tokenId].valuationADI = newVal;
         emit ValuationUpdated(tokenId, oldVal, newVal);
@@ -126,11 +136,11 @@ contract HorseINFT is ERC721, Ownable {
         emit BreedingStatusUpdated(tokenId, available);
     }
 
-    function setInjured(uint256 tokenId, bool injured) external onlyOwner {
+    function setInjured(uint256 tokenId, bool injured) external onlyOwnerOrOracle {
         horses[tokenId].injured = injured;
     }
 
-    function setRetired(uint256 tokenId, bool retired) external onlyOwner {
+    function setRetired(uint256 tokenId, bool retired) external onlyOwnerOrOracle {
         horses[tokenId].retired = retired;
     }
 

@@ -1,12 +1,27 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useAccount, useChainId, useReadContracts, useWriteContract, useSignTypedData } from "wagmi";
+import {
+  useAccount,
+  useChainId,
+  useReadContracts,
+  useWriteContract,
+  useSignTypedData,
+} from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
 import { useState } from "react";
-import { scoreStallions, type HorseTraits, type Recommendation } from "@/lib/breeding-advisor";
-import { scoreStallionsSAgent } from "@/lib/s-agent";
-import { encodeAbiParameters, parseAbiParameters, keccak256, toHex } from "viem";
+import {
+  scoreStallions,
+  type HorseTraits,
+  type Recommendation,
+} from "@/lib/breeding-advisor";
+import { validateHorseName } from "../../../shared/name-validator";
+import {
+  encodeAbiParameters,
+  parseAbiParameters,
+  keccak256,
+  toHex,
+} from "viem";
 
 const BREEDING_PLAN_TYPE = {
   BreedingPlan: [
@@ -24,9 +39,7 @@ const BREEDING_PLAN_TYPE = {
 export default function BreedPage() {
   const searchParams = useSearchParams();
   const stallionParam = searchParams.get("stallion");
-  const advisorMode = searchParams.get("advisor") === "1";
-  const sAgentMode = searchParams.get("agent") === "s-agent";
-  const advisorActive = advisorMode || sAgentMode;
+  const advisorActive = searchParams.get("advisor") === "1";
   const chainId = useChainId();
   const { address } = useAccount();
   const [mareId, setMareId] = useState(stallionParam ? "" : "1");
@@ -53,6 +66,7 @@ export default function BreedPage() {
   const horses: HorseTraits[] = (horsesData ?? []).map((c, i) => {
     if (c.status !== "success" || !c.result) return null;
     const r = c.result as any;
+    if (!r[4]) return null;
     const list = listingsData?.[i];
     const studFee = list && list.status === "success" ? (list.result as any)[0] : 0n;
     return {
@@ -72,7 +86,7 @@ export default function BreedPage() {
   const getRecommendations = () => {
     if (!mare) return;
     const maxFee = 1000n * BigInt(1e18);
-    const recs = sAgentMode ? scoreStallionsSAgent(mare, stallions, maxFee) : scoreStallions(mare, stallions, maxFee);
+    const recs = scoreStallions(mare, stallions, maxFee);
     setPicks(recs);
   };
 
@@ -117,71 +131,237 @@ export default function BreedPage() {
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gold-400 mb-6">Breeding</h1>
+    <div className="space-y-6">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-wide text-foreground">
+          Breeding Lab
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Select a mare, get top 3 stallion recommendations, then purchase and
+          execute a breeding plan with on-chain agents.
+        </p>
+      </header>
       {!address ? (
-        <p className="text-stone-500">Connect wallet.</p>
+        <p className="text-sm text-muted-foreground">
+          Connect your wallet to access breeding tools.
+        </p>
       ) : (
         <>
-          <div className="rounded-xl border border-track-600 bg-track-700 p-5 mb-6">
-            <label className="block text-stone-300 mb-2">Mare (your horse) token ID</label>
-            <input
-              type="number"
-              min={0}
-              className="w-24 px-3 py-2 rounded bg-track-800 border border-track-600"
-              value={mareId}
-              onChange={(e) => setMareId(e.target.value)}
-            />
-          </div>
-          {advisorActive && (
-            <div className="mb-6">
-              <button
-                onClick={getRecommendations}
-                className="px-4 py-2 rounded bg-gold-500 text-track-800 font-medium"
-              >
-                Get top 3 breeding picks {sAgentMode ? "(S-Agent)" : "(Breeding Advisor)"}
-              </button>
-              {picks && (
-                <ul className="mt-4 space-y-3">
-                  {picks.map((p) => (
-                    <li key={p.stallionTokenId} className="border border-track-600 rounded-lg p-4">
-                      <p className="font-medium">Stallion #{p.stallionTokenId} · Score: {(p.score * 100).toFixed(1)}%</p>
-                      <p className="text-sm text-stone-400">Risks: {p.riskFlags.join(", ") || "None"}</p>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() => handlePurchaseRight(p.stallionTokenId)}
-                          className="px-3 py-1 rounded bg-track-600 text-sm"
-                        >
-                          Purchase right
-                        </button>
-                        {executeMode && (
-                          <>
-                            <input
-                              placeholder="Offspring name"
-                              className="px-2 py-1 rounded bg-track-800 text-sm w-32"
-                              value={offspringName}
-                              onChange={(e) => setOffspringName(e.target.value)}
-                            />
-                            <button
-                              onClick={() => handleExecute(p.stallionTokenId)}
-                              className="px-3 py-1 rounded bg-gold-500 text-track-800 text-sm"
-                            >
-                              Execute plan
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <label className="mt-3 flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={executeMode} onChange={(e) => setExecuteMode(e.target.checked)} />
-                Execute with approval (sign plan and execute on-chain)
-              </label>
+          <section className="grid gap-6 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,3fr)] items-start">
+            <div className="space-y-4">
+              <div className="rounded-sm border border-border bg-card p-4 space-y-3">
+                <label className="block text-xs font-medium text-muted-foreground">
+                  Mare (your horse) token ID
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  className="w-24 px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
+                  value={mareId}
+                  onChange={(e) => setMareId(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Or pick from the list below. Only horses with trait vectors
+                  are shown.
+                </p>
+              </div>
+
+              <div className="rounded-sm border border-border bg-card p-3 space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-xs font-semibold text-foreground tracking-wide">
+                    Select mare
+                  </h2>
+                  {mare && (
+                    <span className="text-[11px] font-mono text-muted-foreground">
+                      Token #{mare.tokenId}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {horses.map((h) => {
+                    const selected = h.tokenId === Number(mareId);
+                    return (
+                      <button
+                        key={h.tokenId}
+                        type="button"
+                        onClick={() => setMareId(String(h.tokenId))}
+                        className={`w-full text-left px-3 py-2 rounded-sm border text-sm transition-colors ${
+                          selected
+                            ? "border-terminal-green/70 bg-secondary/80"
+                            : "border-border bg-secondary/40 hover:bg-secondary/70"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-foreground truncate">
+                              {String(h.name)}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Pedigree {(h.pedigreeScore / 100).toFixed(1)}% ·{" "}
+                              {Number(h.valuationADI) / 1e18} ADI
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {horses.length === 0 && (
+                    <p className="text-xs text-muted-foreground px-1 py-2">
+                      No demo horses found. Seed horses on-chain to use the
+                      breeding lab.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
-          <p className="text-stone-500 text-sm">Purchase breeding right with ADI, then call breed(stallionId, mareId, offspringName, salt).</p>
+
+            <div className="space-y-4">
+              {advisorActive && (
+                <section className="rounded-sm border border-border bg-card p-4 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-xs font-semibold text-foreground tracking-wide">
+                        Top 3 breeding picks
+                      </h2>
+                      <p className="text-[11px] text-muted-foreground">
+                        Breeding Advisor scores stallions on compatibility, risk, and uplift — powered by Secretariat&apos;s XGBoost model.
+                      </p>
+                    </div>
+                    <button
+                      onClick={getRecommendations}
+                      className="px-3 py-1.5 rounded-sm bg-primary text-primary-foreground text-xs font-mono hover:bg-primary/90 transition-colors"
+                    >
+                      Get top 3 picks
+                    </button>
+                  </div>
+
+                  {picks ? (
+                    <ul className="space-y-3">
+                      {picks.map((p, idx) => (
+                        <li
+                          key={p.stallionTokenId}
+                          className="border border-border rounded-sm bg-secondary/40 p-4 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">
+                                Stallion #{p.stallionTokenId}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Match {(p.score * 100).toFixed(1)}%
+                              </p>
+                            </div>
+                            <span className="text-[11px] font-mono text-muted-foreground">
+                              #{idx + 1}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Risks: {p.riskFlags.join(", ") || "None"}
+                          </p>
+                          <div className="flex gap-2 flex-wrap">
+                            <button
+                              onClick={() => handlePurchaseRight(p.stallionTokenId)}
+                              className="px-3 py-1 rounded-sm bg-secondary text-xs font-mono hover:bg-secondary/80 transition-colors"
+                            >
+                              Purchase right
+                            </button>
+                            {executeMode && (
+                              <div className="flex flex-col gap-1">
+                                <div className="flex gap-2 items-center">
+                                  <input
+                                    placeholder="Offspring name"
+                                    className={`px-2 py-1 rounded-sm bg-secondary text-xs w-40 border ${
+                                      offspringName &&
+                                      !validateHorseName(offspringName).valid
+                                        ? "border-destructive/60"
+                                        : "border-border"
+                                    }`}
+                                    value={offspringName}
+                                    onChange={(e) =>
+                                      setOffspringName(e.target.value)
+                                    }
+                                  />
+                                  <button
+                                    onClick={() =>
+                                      handleExecute(p.stallionTokenId)
+                                    }
+                                    disabled={
+                                      !!offspringName &&
+                                      !validateHorseName(offspringName).valid
+                                    }
+                                    className="px-3 py-1 rounded-sm bg-primary text-primary-foreground text-xs font-mono disabled:opacity-40"
+                                  >
+                                    Execute plan
+                                  </button>
+                                </div>
+                                {offspringName &&
+                                  !validateHorseName(offspringName).valid && (
+                                    <p className="text-[10px] text-destructive">
+                                      {validateHorseName(offspringName).errors.join(
+                                        "; ",
+                                      )}
+                                    </p>
+                                  )}
+                                {offspringName &&
+                                  validateHorseName(offspringName).valid && (
+                                    <p className="text-[10px] text-terminal-green">
+                                      Name valid (Jockey Club rules)
+                                    </p>
+                                  )}
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="border border-dashed border-border rounded-sm bg-secondary/30 p-6 text-center">
+                      <p className="text-xs text-muted-foreground">
+                        Select a mare on the left, then fetch top 3 picks to see
+                        match scores and risks.
+                      </p>
+                    </div>
+                  )}
+                  <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={executeMode}
+                      onChange={(e) => setExecuteMode(e.target.checked)}
+                    />
+                    Execute with approval (sign plan and execute on-chain)
+                  </label>
+                </section>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-sm border border-border bg-card p-4 space-y-2">
+            <h2 className="text-xs font-semibold text-foreground tracking-wide">
+              Execution timeline
+            </h2>
+            <p className="text-[11px] text-muted-foreground">
+              Advisor mode: recommend-only. Execute mode: sign typed plan and
+              let the agent contract purchase rights and call{" "}
+              <span className="font-mono">
+                breed(stallionId, mareId, offspringName, salt)
+              </span>
+              .
+            </p>
+            <div className="mt-2 flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
+              <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
+                1. Approve ADI
+              </span>
+              <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
+                2. Purchase breeding right
+              </span>
+              <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
+                3. Sign BreedingPlan
+              </span>
+              <span className="px-3 py-1 rounded-sm bg-secondary/60 border border-border">
+                4. Offspring minted
+              </span>
+            </div>
+          </section>
         </>
       )}
     </div>

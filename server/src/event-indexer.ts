@@ -1,5 +1,5 @@
-import { createPublicClient, http, parseAbiItem, type Log } from "viem";
-import type { TrainingEvent } from "../../shared/types.js";
+import { createPublicClient, http, parseAbi, parseAbiItem, type Log } from "viem";
+import type { TrainingEvent, FeatureVector } from "../../shared/types.js";
 import fs from "fs";
 import path from "path";
 
@@ -17,6 +17,10 @@ const chain = {
   rpcUrls: { default: { http: [RPC] } },
 } as const;
 
+const horseINFTAbi = parseAbi([
+  "function getHorseData(uint256) view returns ((string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, string encryptedURI, bytes32 metadataHash))",
+]);
+
 const oracleEvents = [
   parseAbiItem("event RaceResultReported(uint256 indexed tokenId, uint8 placing, uint256 earningsADI)"),
   parseAbiItem("event InjuryReported(uint256 indexed tokenId, uint16 severityBps)"),
@@ -24,8 +28,17 @@ const oracleEvents = [
 ];
 
 const inftEvents = [
-  parseAbiItem("event ValuationUpdated(uint256 indexed tokenId, uint256 newValue)"),
+  parseAbiItem("event ValuationUpdated(uint256 indexed tokenId, uint256 oldVal, uint256 newVal)"),
 ];
+
+let indexerClient: ReturnType<typeof createPublicClient> | null = null;
+
+function getClient() {
+  if (!indexerClient) {
+    indexerClient = createPublicClient({ chain, transport: http(RPC) });
+  }
+  return indexerClient;
+}
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -38,20 +51,72 @@ function appendEvent(event: TrainingEvent) {
   fs.appendFileSync(JSONL_PATH, JSON.stringify(event) + "\n");
 }
 
-function eventLogToTrainingEvent(
+async function fetchHorseFeatures(tokenId: number): Promise<{ features: Partial<FeatureVector>; valuationADI: number }> {
+  if (!HORSE_INFT || HORSE_INFT === "0x0000000000000000000000000000000000000000") {
+    return { features: {}, valuationADI: 0 };
+  }
+  try {
+    const client = getClient();
+    const raw = await client.readContract({
+      address: HORSE_INFT as `0x${string}`,
+      abi: horseINFTAbi,
+      functionName: "getHorseData",
+      args: [BigInt(tokenId)],
+    });
+
+    const r = raw as any;
+    const traits: number[] = (r.traitVector ?? r[4] ?? []).map(Number);
+
+    const features: Partial<FeatureVector> = {
+      speed: traits[0] ?? 0,
+      stamina: traits[1] ?? 0,
+      temperament: traits[2] ?? 0,
+      conformation: traits[3] ?? 0,
+      health: traits[4] ?? 0,
+      agility: traits[5] ?? 0,
+      raceIQ: traits[6] ?? 0,
+      consistency: traits[7] ?? 0,
+      pedigreeScore: Number(r.pedigreeScore ?? r[5] ?? 0),
+      injured: Boolean(r.injured ?? r[9]),
+      retired: Boolean(r.retired ?? r[10]),
+      birthTimestamp: Number(r.birthTimestamp ?? r[1] ?? 0),
+      sireId: Number(r.sireId ?? r[2] ?? 0),
+      damId: Number(r.damId ?? r[3] ?? 0),
+    };
+
+    const valuationADI = Number(r.valuationADI ?? r[6] ?? 0);
+    return { features, valuationADI };
+  } catch (e) {
+    console.warn(`Event indexer: failed to fetch HorseData for token ${tokenId}:`, (e as Error).message);
+    return { features: {}, valuationADI: 0 };
+  }
+}
+
+async function buildTrainingEvent(
   log: Log,
   eventType: string,
   eventData: Record<string, unknown>,
-): TrainingEvent {
+): Promise<TrainingEvent> {
+  const tokenId = Number((eventData.tokenId as number) ?? 0);
+  const { features, valuationADI } = await fetchHorseFeatures(tokenId);
+
+  let valuationBefore = valuationADI;
+  let valuationAfter = valuationADI;
+
+  if (eventType === "ValuationUpdated") {
+    valuationBefore = Number(eventData.oldVal ?? 0);
+    valuationAfter = Number(eventData.newVal ?? 0);
+  }
+
   return {
     timestamp: Date.now(),
     blockNumber: Number(log.blockNumber ?? 0),
     txHash: log.transactionHash ?? "0x",
-    tokenId: Number((eventData.tokenId as bigint) ?? 0),
+    tokenId,
     eventType,
-    featuresBefore: {},
-    valuationBefore: 0,
-    valuationAfter: 0,
+    featuresBefore: features,
+    valuationBefore,
+    valuationAfter,
     eventData,
   };
 }
@@ -63,7 +128,7 @@ export function startIndexer(): void {
       return;
     }
 
-    const client = createPublicClient({ chain, transport: http(RPC) });
+    const client = getClient();
 
     if (HORSE_ORACLE && HORSE_ORACLE !== "0x0000000000000000000000000000000000000000") {
       for (const event of oracleEvents) {
@@ -72,19 +137,20 @@ export function startIndexer(): void {
           event,
           onLogs: (logs) => {
             for (const log of logs) {
-              try {
-                const args = (log as any).args ?? {};
-                const eventType = event.name;
-                const data: Record<string, unknown> = {};
-                for (const [k, v] of Object.entries(args)) {
-                  data[k] = typeof v === "bigint" ? Number(v) : v;
+              (async () => {
+                try {
+                  const args = (log as any).args ?? {};
+                  const data: Record<string, unknown> = {};
+                  for (const [k, v] of Object.entries(args)) {
+                    data[k] = typeof v === "bigint" ? Number(v) : v;
+                  }
+                  const te = await buildTrainingEvent(log, event.name, data);
+                  appendEvent(te);
+                  console.log(`Indexed ${event.name} for token ${te.tokenId} (val: ${te.valuationBefore})`);
+                } catch (e) {
+                  console.warn("Event indexer error (oracle):", e);
                 }
-                const te = eventLogToTrainingEvent(log, eventType, data);
-                appendEvent(te);
-                console.log(`Indexed ${eventType} for token ${te.tokenId}`);
-              } catch (e) {
-                console.warn("Event indexer error (oracle):", e);
-              }
+              })();
             }
           },
           onError: (err) => {
@@ -101,18 +167,20 @@ export function startIndexer(): void {
           event,
           onLogs: (logs) => {
             for (const log of logs) {
-              try {
-                const args = (log as any).args ?? {};
-                const data: Record<string, unknown> = {};
-                for (const [k, v] of Object.entries(args)) {
-                  data[k] = typeof v === "bigint" ? Number(v) : v;
+              (async () => {
+                try {
+                  const args = (log as any).args ?? {};
+                  const data: Record<string, unknown> = {};
+                  for (const [k, v] of Object.entries(args)) {
+                    data[k] = typeof v === "bigint" ? Number(v) : v;
+                  }
+                  const te = await buildTrainingEvent(log, event.name, data);
+                  appendEvent(te);
+                  console.log(`Indexed ${event.name} for token ${te.tokenId} (${te.valuationBefore} → ${te.valuationAfter})`);
+                } catch (e) {
+                  console.warn("Event indexer error (inft):", e);
                 }
-                const te = eventLogToTrainingEvent(log, event.name, data);
-                appendEvent(te);
-                console.log(`Indexed ${event.name} for token ${te.tokenId}`);
-              } catch (e) {
-                console.warn("Event indexer error (inft):", e);
-              }
+              })();
             }
           },
           onError: (err) => {
@@ -122,7 +190,7 @@ export function startIndexer(): void {
       }
     }
 
-    console.log("Event indexer started");
+    console.log("Event indexer started (fetches full HorseData per event)");
   } catch (e) {
     console.warn("Event indexer failed to start:", e);
   }

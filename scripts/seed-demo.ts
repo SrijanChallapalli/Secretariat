@@ -146,13 +146,6 @@ async function main() {
         args: [owner, { name: "Secretariat Breeding Advisor", version: "1.0", specialization: "breeding", modelBundleRootHash: "" }],
       });
       console.log("Minted Breeding Advisor iNFT (token 0) to owner");
-      await (wallet as any).writeContract({
-        address: agentAddr as `0x${string}`,
-        abi: abi.BreedingAdvisorINFT,
-        functionName: "mint",
-        args: [owner, { name: "S-Agent", version: "1.0", specialization: "breeding-synergy", modelBundleRootHash: "" }],
-      });
-      console.log("Minted S-Agent iNFT (token 1) to owner");
     } catch (e) {
       console.warn("Agent iNFT mint skipped:", (e as Error).message);
     }

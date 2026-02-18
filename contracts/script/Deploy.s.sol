@@ -24,6 +24,7 @@ contract DeployScript is Script {
         horseNFT.setBreedingMarketplace(address(marketplace));
 
         HorseOracle horseOracle = new HorseOracle(address(horseNFT));
+        horseNFT.setHorseOracle(address(horseOracle));
         HorseSyndicateVaultFactory vaultFactory = new HorseSyndicateVaultFactory(address(adi), address(horseNFT));
 
         BreedingAdvisorINFT agentINFT = new BreedingAdvisorINFT();
