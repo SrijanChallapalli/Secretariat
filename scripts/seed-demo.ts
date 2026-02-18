@@ -80,10 +80,14 @@ async function main() {
   });
   console.log("Minted 1M ADI to owner");
 
-  // Mint 3 horses: 0 stallion, 1 mare, 2 another stallion
-  const h0 = encodeHorseData({ name: "Thunder Strike", traits: [90, 82, 70, 88, 95, 80, 85, 82], pedigreeScore: 9200, valuation: BigInt(5000e18), breedingAvailable: true });
-  const h1 = encodeHorseData({ name: "Silver Mare", sireId: 0, traits: [78, 88, 75, 80, 85, 76, 72, 80], pedigreeScore: 8200, breedingAvailable: true });
-  const h2 = encodeHorseData({ name: "Dark Legend", traits: [85, 78, 72, 90, 88, 84, 88, 76], pedigreeScore: 8800, valuation: BigInt(3500e18), breedingAvailable: true });
+  // Mint 3 horses: 0 stallion (star), 1 mare, 2 stallion (value play)
+  // Names validated with validateHorseName():
+  //   "Galileos Edge" (13 chars, valid) ✓
+  //   "Storm Cat Lady" (14 chars, valid) ✓
+  //   "First Mission Colt" (18 chars exactly, valid) ✓
+  const h0 = encodeHorseData({ name: "Galileos Edge", traits: [85, 92, 78, 88, 95, 80, 90, 85], pedigreeScore: 9400, valuation: BigInt(8000e18), breedingAvailable: true });
+  const h1 = encodeHorseData({ name: "Storm Cat Lady", sireId: 0, traits: [88, 80, 82, 85, 90, 84, 78, 82], pedigreeScore: 8600, valuation: BigInt(4000e18), breedingAvailable: true });
+  const h2 = encodeHorseData({ name: "First Mission Colt", traits: [82, 85, 75, 90, 88, 82, 85, 78], pedigreeScore: 8200, valuation: BigInt(2500e18), breedingAvailable: true });
 
   const tx0 = await (wallet as any).writeContract({
     address: horseAddr as `0x${string}`,

@@ -18,6 +18,9 @@ contracts/broadcast/*/31337/
 contracts/broadcast/*/16602/
 contracts/broadcast/*/99999/
 
+# Training / prediction data
+server/data/
+
 # Build output
 server/dist/
 *.tsbuildinfo

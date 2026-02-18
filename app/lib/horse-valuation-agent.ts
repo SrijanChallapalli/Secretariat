@@ -5,6 +5,9 @@
  * Events: RACE_WIN, RACE_LOSS, INJURY, RETIREMENT, OFFSPRING_WIN, DEATH.
  */
 
+export { calculateScarcityPremium } from "../../shared/scarcity";
+import { calculateOfficialAge } from "../../shared/age";
+
 export interface HorseValuationInput {
   name?: string;
   age?: number;
@@ -122,7 +125,7 @@ export function calculateValue(
     baseValue =
       breedingValue * ageModifier * healthModifier * statusModifier;
   } else if (status === "deceased") {
-    baseValue = breedingValue * 0.2 * statusModifier;
+    baseValue = 0;
   } else {
     baseValue = (racingValue + breedingValue) * ageModifier * healthModifier;
   }
@@ -217,7 +220,7 @@ export function adjustForEvent(
     case "DEATH":
       h.status = "deceased";
       h.health = 0;
-      eventMultiplier = 1.0;
+      eventMultiplier = 0;
       break;
     default:
       eventMultiplier = 1.0;
@@ -315,9 +318,7 @@ export function mapHorseINFTToValuationInput(
   const age =
     options.age ??
     (chain.birthTimestamp != null
-      ? Math.floor(
-          (Date.now() / 1000 - Number(chain.birthTimestamp)) / (365.25 * 24 * 3600)
-        )
+      ? calculateOfficialAge(Number(chain.birthTimestamp))
       : undefined);
   return {
     name: chain.name as string | undefined,
@@ -335,3 +336,5 @@ export function mapHorseINFTToValuationInput(
     offspringWins: options.offspringWins ?? chain.offspringWins ?? 0,
   };
 }
+
+export { createEngine } from "./valuation-engine";

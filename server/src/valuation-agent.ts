@@ -3,6 +3,8 @@
  * Matches app/lib/horse-valuation-agent.ts and server/bundle/valuation-agent/valuation_agent_code.ts.
  */
 
+export { calculateScarcityPremium } from "../../shared/scarcity.js";
+
 export interface HorseValuationInput {
   name?: string;
   age?: number;
@@ -93,7 +95,7 @@ function calculate(
   } else if (status === "retired") {
     baseValue = breedingValue * ageMod * healthMod * statusMod;
   } else if (status === "deceased") {
-    baseValue = breedingValue * 0.2 * statusMod;
+    baseValue = 0;
   } else {
     baseValue = (racingValue + breedingValue) * ageMod * healthMod;
   }
@@ -192,6 +194,7 @@ export function runValuation(
     case "DEATH":
       horse.status = "deceased";
       horse.health = 0;
+      eventMultiplier = 0;
       break;
     default:
       break;
