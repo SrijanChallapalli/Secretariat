@@ -1,278 +1,209 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { useState, useMemo } from "react";
+import { useState } from "react";
+import { useReadContracts } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
-import { ogGalileo } from "@/lib/chains";
-import { mapHorseINFTToValuationInput, calculateValue } from "@/lib/horse-valuation-agent";
-import { calculateOfficialAge } from "../../../../shared/age";
-import { validateHorseName } from "../../../../shared/name-validator";
-
-function CreateVaultButton({ horseTokenId }: { horseTokenId: number }) {
-  const [totalShares, setTotalShares] = useState("100");
-  const [sharePrice, setSharePrice] = useState("10");
-  const { writeContract } = useWriteContract();
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input
-        type="text"
-        placeholder="Total shares"
-        className="w-24 px-2 py-1 rounded-sm bg-secondary text-sm border border-border"
-        value={totalShares}
-        onChange={(e) => setTotalShares(e.target.value)}
-      />
-      <input
-        type="text"
-        placeholder="Price ADI"
-        className="w-24 px-2 py-1 rounded-sm bg-secondary text-sm border border-border"
-        value={sharePrice}
-        onChange={(e) => setSharePrice(e.target.value)}
-      />
-      <button
-        className="px-3 py-1 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        onClick={() =>
-          writeContract({
-            address: addresses.syndicateVaultFactory,
-            abi: abis.HorseSyndicateVaultFactory,
-            functionName: "createVault",
-            args: [BigInt(horseTokenId), BigInt(totalShares), BigInt(sharePrice) * 10n ** 18n],
-          })
-        }
-      >
-        Create vault
-      </button>
-    </div>
-  );
-}
-
-import { formatEther } from "viem";
+import { isOnChainHorse } from "@/lib/on-chain-horses";
+import {
+  mapToHorseFullData,
+  parseRawHorseData,
+  parseRawListing,
+} from "@/lib/on-chain-mapping";
+import { HorseHero } from "@/components/horse/HorseHero";
+import { HorseTabs, type HorseTabId } from "@/components/horse/HorseTabs";
+import { OverviewTab } from "@/components/horse/OverviewTab";
+import { OwnershipTab } from "@/components/horse/OwnershipTab";
+import { BreedingTab } from "@/components/horse/BreedingTab";
+import { AnalyticsTab } from "@/components/horse/AnalyticsTab";
+import { Home, FileText, Clock } from "lucide-react";
 import Link from "next/link";
-
-const TRAIT_NAMES = ["Speed", "Stamina", "Temperament", "Conformation", "Health", "Agility", "Race IQ", "Consistency"];
 
 export default function HorseDetailPage() {
   const params = useParams();
   const id = Number(params.id);
-  const { address } = useAccount();
+  const [activeTab, setActiveTab] = useState<HorseTabId>("overview");
 
-  const { data: horseData, isLoading: horseLoading, isError: horseError } = useReadContract({
+  const horseCall = {
     address: addresses.horseINFT,
     abi: abis.HorseINFT,
-    functionName: "getHorseData",
-    args: [BigInt(id)],
-    chainId: ogGalileo.id,
-  });
-
-  const { data: listing } = useReadContract({
+    functionName: "getHorseData" as const,
+    args: [BigInt(id)] as [bigint],
+  };
+  const listingCall = {
     address: addresses.breedingMarketplace,
     abi: abis.BreedingMarketplace,
-    functionName: "listings",
-    args: [BigInt(id)],
-    chainId: ogGalileo.id,
+    functionName: "listings" as const,
+    args: [BigInt(id)] as [bigint],
+  };
+  const ownerCall = {
+    address: addresses.horseINFT,
+    abi: abis.HorseINFT,
+    functionName: "ownerOf" as const,
+    args: [BigInt(id)] as [bigint],
+  };
+
+  const { data: horseResult } = useReadContracts({
+    contracts: [horseCall, listingCall, ownerCall] as any,
   });
 
-  const { data: vaultAddr } = useReadContract({
-    address: addresses.syndicateVaultFactory,
-    abi: abis.HorseSyndicateVaultFactory,
-    functionName: "vaultForHorse",
-    args: [BigInt(id)],
-    chainId: ogGalileo.id,
-  });
+  const horse = (() => {
+    if (!horseResult || horseResult.length < 3) return null;
+    const [hRes, lRes, oRes] = horseResult;
+    if (hRes?.status !== "success" || !hRes.result || !isOnChainHorse(hRes.result))
+      return null;
+    const raw = parseRawHorseData(hRes.result);
+    if (!raw) return null;
+    const listing =
+      lRes?.status === "success" && lRes.result
+        ? parseRawListing(lRes.result)
+        : null;
+    const owner = (oRes?.status === "success" ? oRes.result : null) as string | null;
+    return mapToHorseFullData(id, raw, listing, owner ?? "0x0");
+  })();
 
-  // getHorseData returns a struct: viem can give object or tuple
-  const raw = horseData as any;
-  const name = raw?.name ?? raw?.[0];
-  const birthTs = raw?.birthTimestamp ?? raw?.[1];
-  const sireId = raw?.sireId ?? raw?.[2];
-  const damId = raw?.damId ?? raw?.[3];
-  const traitVector = raw?.traitVector ?? raw?.[4];
-  const pedigreeScore = raw?.pedigreeScore ?? raw?.[5] ?? 0;
-  const valuationADI = raw?.valuationADI ?? raw?.[6] ?? 0n;
-  const breedingAvailable = raw?.breedingAvailable ?? raw?.[8] ?? false;
-  const injured = raw?.injured ?? raw?.[9] ?? false;
-  const retired = raw?.retired ?? raw?.[10] ?? false;
-  const h = { name, birthTimestamp: birthTs, sireId, damId, traitVector, pedigreeScore, valuationADI, breedingAvailable, injured, retired };
-  const traits = useMemo(() => (traitVector ?? []) as number[], [traitVector]);
-  const listArr = listing as [bigint, bigint, bigint, boolean, boolean] | undefined;
-  const [studFee, maxUses, usedCount, useAllowlist, active] = listArr ?? [BigInt(0), BigInt(0), BigInt(0), false, false];
-
-  const officialAge = useMemo(() => {
-    if (birthTs == null || Number(birthTs) === 0) return null;
-    return calculateOfficialAge(Number(birthTs));
-  }, [birthTs]);
-
-  const nameCheck = useMemo(() => {
-    if (!name) return null;
-    return validateHorseName(String(name));
-  }, [name]);
-
-  const chainHorse = useMemo(
-    () => ({
-      name,
-      birthTimestamp: birthTs,
-      traitVector: traits,
-      pedigreeScore: Number(pedigreeScore),
-      valuationADI,
-      injured,
-      retired,
-    }),
-    [name, birthTs, traits, pedigreeScore, valuationADI, injured, retired]
-  );
-  const valuationInput = useMemo(() => mapHorseINFTToValuationInput(chainHorse), [chainHorse]);
-  const agentValuation = useMemo(
-    () => calculateValue(valuationInput, { averageHorseValue: 50000, bullish: false }),
-    [valuationInput]
-  );
-
-  if (horseLoading) {
-    return <p className="text-stone-500">Loading horse…</p>;
-  }
-  if (horseError || !horseData) {
-    return <p className="text-stone-500">Invalid horse id or failed to load. Check the token exists on OG Galileo.</p>;
-  }
-  if (!name && !String(raw?.[0])) {
-    return <p className="text-stone-500">Invalid horse id.</p>;
+  if (!horseResult) {
+    return (
+      <div className="max-w-4xl space-y-6">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-prestige-gold transition-colors"
+        >
+          ← Back
+        </Link>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-12 text-center">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      </div>
+    );
   }
 
-  const score = Number(pedigreeScore) / 100;
-  const val = formatEther(valuationADI as bigint);
+  if (!horse) {
+    return (
+      <div className="max-w-4xl space-y-6">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-prestige-gold transition-colors"
+        >
+          ← Back
+        </Link>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-12 text-center">
+          <p className="text-lg text-muted-foreground">
+            Horse not found. Token ID {id} does not exist on chain.
+          </p>
+          <Link
+            href="/"
+            className="mt-4 inline-block text-prestige-gold hover:underline"
+          >
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-wide text-foreground">
-          {String(name) || `Horse #${id}`}
-        </h1>
-        <p className="text-sm text-muted-foreground font-mono">
-          Token ID: {id}
-          {officialAge != null ? ` · Age: ${officialAge} yr` : ""} · Pedigree:{" "}
-          {score.toFixed(1)}% · Valuation: {val} ADI
-        </p>
-      </header>
+    <div className="max-w-5xl space-y-8">
+      <HorseHero
+        horse={horse}
+        onBuyShares={() => {}}
+        onPurchaseBreedingRight={() => {}}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <section className="rounded-sm border border-border bg-card p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground tracking-wide">
-            Traits
+      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Home className="h-4 w-4 text-prestige-gold shrink-0" />
+          <h2 className="text-xs font-semibold tracking-[0.2em] text-muted-foreground uppercase">
+            STABLE RECORD
           </h2>
-          <ul className="space-y-1.5">
-            {TRAIT_NAMES.map((t, i) => (
-              <li key={i} className="flex justify-between text-xs">
-                <span className="text-muted-foreground">{t}</span>
-                <span className="font-mono text-foreground">
-                  {traits[i] ?? 0}/100
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section className="rounded-sm border border-border bg-card p-4 space-y-2">
-          <h2 className="text-sm font-semibold text-foreground tracking-wide">
-            Status
-          </h2>
-          {officialAge != null && (
-            <p className="text-sm">
-              Official age:{" "}
-              <span className="text-prestige-gold font-mono">
-                {officialAge}
-              </span>{" "}
-              (Jan 1 rule)
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              FOALED
             </p>
-          )}
-          <p className="text-sm">
-            Breeding available:{" "}
-            <span className="font-mono">
-              {breedingAvailable ? "Yes" : "No"}
-            </span>
-          </p>
-          <p className="text-sm">
-            Injured:{" "}
-            {injured ? (
-              <span className="text-terminal-red font-mono">Yes</span>
-            ) : (
-              "No"
-            )}
-          </p>
-          <p className="text-sm">
-            Retired:{" "}
-            {retired ? (
-              <span className="text-terminal-amber font-mono">Yes</span>
-            ) : (
-              "No"
-            )}
-          </p>
-          {nameCheck && !nameCheck.valid && (
-            <p className="mt-2 text-xs text-terminal-amber">
-              Name issue: {nameCheck.errors.join("; ")}
+            <p className="text-sm text-foreground">{horse.foaled}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              SIRE
             </p>
-          )}
-          {active && (
-            <p className="mt-2 text-xs text-prestige-gold font-mono">
-              Listed · Stud fee: {formatEther(studFee as bigint)} ADI · Uses:{" "}
-              {String(usedCount)}/{String(maxUses)}
+            <p className="text-sm text-foreground">{horse.sire}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              DAM
             </p>
-          )}
-        </section>
+            <p className="text-sm text-foreground">{horse.dam}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              MAJOR RESULT
+            </p>
+            <p className="text-sm text-foreground">
+              <span className="text-prestige-gold">★</span>{" "}
+              {horse.majorResult.replace("★ ", "")}
+            </p>
+          </div>
+          <div className="md:col-span-1">
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              STEWARD NOTE
+            </p>
+            <p className="text-sm text-foreground">{horse.stewardNote}</p>
+          </div>
+        </div>
       </div>
 
-      <section className="rounded-sm border border-border bg-secondary/60 p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-prestige-gold tracking-wide">
-          Horse Valuation Agent
-        </h2>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Racing + breeding value with age, health, and status modifiers.
-          When the oracle reports race/injury/news, this agent computes
-          suggested USD valuation — powered by Secretariat&apos;s XGBoost model.
-        </p>
-        <p className="text-sm text-foreground font-mono">
-          Agent value (USD): $
-          {agentValuation.value.toLocaleString(undefined, {
-            maximumFractionDigits: 0,
-          })}
-        </p>
-        <ul className="mt-1 text-xs text-muted-foreground space-y-1">
-          <li>
-            Racing component: $
-            {agentValuation.breakdown.racingValue.toLocaleString(undefined, {
-              maximumFractionDigits: 0,
-            })}
-          </li>
-          <li>
-            Breeding component: $
-            {agentValuation.breakdown.breedingValue.toLocaleString(undefined, {
-              maximumFractionDigits: 0,
-            })}
-          </li>
-          <li>
-            Modifiers: age {agentValuation.breakdown.ageModifier.toFixed(2)} ×
-            health {agentValuation.breakdown.healthModifier.toFixed(2)} × market{" "}
-            {agentValuation.breakdown.marketModifier.toFixed(2)}
-          </li>
-        </ul>
-      </section>
-
-      <div className="flex flex-wrap gap-3">
-        {vaultAddr &&
-        vaultAddr !== "0x0000000000000000000000000000000000000000" ? (
-          <Link
-            href={`/vault/${id}`}
-            className="inline-flex items-center px-4 py-2 rounded-sm bg-primary/10 text-prestige-gold border border-border text-sm font-medium hover:bg-primary/20 transition-colors"
-          >
-            View vault / Buy shares
-          </Link>
-        ) : (
-          address && <CreateVaultButton horseTokenId={id} />
-        )}
-        {breedingAvailable && active && address && (
-          <Link
-            href={`/breed?stallion=${id}`}
-            className="inline-flex items-center px-4 py-2 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            Purchase breeding right
-          </Link>
-        )}
+      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <FileText className="h-4 w-4 text-prestige-gold shrink-0" />
+          <h2 className="text-xs font-semibold tracking-[0.2em] text-muted-foreground uppercase">
+            PROVENANCE RECORD
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              DNA HASH
+            </p>
+            <p className="text-sm font-mono text-terminal-cyan cursor-pointer hover:underline">
+              {horse.dnaHash.slice(0, 10)}...{horse.dnaHash.slice(-4)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              METADATA POINTER
+            </p>
+            <p className="text-sm text-muted-foreground font-mono">
+              {horse.metadataPointer}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              LAST RESULT
+            </p>
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" />
+              {horse.lastResult}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              ORACLE SOURCE
+            </p>
+            <p className="text-sm text-muted-foreground font-mono">
+              {horse.oracleSource}
+            </p>
+          </div>
+        </div>
       </div>
+
+      <HorseTabs activeTab={activeTab} onTabChange={setActiveTab}>
+        {activeTab === "overview" && <OverviewTab horse={horse} />}
+        {activeTab === "ownership" && <OwnershipTab horse={horse} />}
+        {activeTab === "breeding" && <BreedingTab horse={horse} />}
+        {activeTab === "analytics" && <AnalyticsTab horse={horse} />}
+      </HorseTabs>
     </div>
   );
 }

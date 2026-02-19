@@ -35,61 +35,12 @@ type RevenueEvent = {
   amount: number;
 };
 
-const oracleEvents: OracleEvent[] = [
-  {
-    id: "1",
-    type: "race",
-    description: "G1: Secretariat’s Pride wins at Belmont by 3L",
-    timestamp: new Date().toISOString(),
-    impact: 4.2,
-  },
-  {
-    id: "2",
-    type: "injury",
-    description: "Training setback reported for Derby Prospect #12",
-    timestamp: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
-    impact: -2.1,
-  },
-  {
-    id: "3",
-    type: "news",
-    description: "Stud book opens new cross-border syndicate window",
-    timestamp: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-    impact: 1.3,
-  },
-];
+// On-chain demo only: events come from chain
+const oracleEvents: OracleEvent[] = [];
 
-const breedingActivity: BreedingActivity[] = [
-  {
-    id: "b1",
-    type: "right_purchased",
-    description: "Breeding right purchased: Stallion #2 → Mare #5",
-    timestamp: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
-  },
-  {
-    id: "b2",
-    type: "offspring_minted",
-    description: "Offspring minted: Token #18 (G1 x G2 cross)",
-    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-  },
-];
+const breedingActivity: BreedingActivity[] = [];
 
-const revenueEvents: RevenueEvent[] = [
-  {
-    id: "r1",
-    type: "deposit",
-    description: "Vault #3 distribution deposited",
-    timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    amount: 12450,
-  },
-  {
-    id: "r2",
-    type: "claim",
-    description: "LP claimed fees from Marketplace pool",
-    timestamp: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-    amount: 3820,
-  },
-];
+const revenueEvents: RevenueEvent[] = [];
 
 const LiveFeed = () => {
   const [pulse, setPulse] = useState(false);
@@ -129,47 +80,49 @@ const LiveFeed = () => {
   };
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-5 space-y-8 font-sans text-brand-ivory">
       <div>
         <h3
-          className={`text-[10px] font-mono uppercase tracking-wider mb-3 flex items-center gap-2 transition-colors ${
-            pulse ? "text-primary" : "text-muted-foreground"
-          }`}
+          className={`text-[10px] font-sans font-bold uppercase tracking-widest mb-4 flex items-center gap-2 transition-colors ${pulse ? "text-prestige-gold" : "text-muted-foreground"
+            }`}
         >
           <span
-            className={`h-1.5 w-1.5 rounded-full bg-primary ${pulse ? "pulse-glow" : ""}`}
+            className={`h-1.5 w-1.5 rounded-full bg-prestige-gold ${pulse ? "pulse-glow" : ""}`}
           />
           Live Oracle Feed
         </h3>
-        <div className="space-y-1.5">
-          {oracleEvents.slice(0, 6).map((event) => (
+        <div className="space-y-2">
+          {oracleEvents.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-3">No oracle events on chain yet.</p>
+          ) : (
+          oracleEvents.slice(0, 6).map((event) => (
             <div
               key={event.id}
-              className={`flex items-start gap-2 p-2 rounded-sm bg-card hover:bg-muted/50 transition-colors ${
-                event.type === "race" && event.description.includes("G1") ? "gold-shimmer" : ""
-              }`}
+              className={`flex items-start gap-3 p-3 rounded border border-white/5 bg-white/5 hover:bg-white/10 transition-all group ${event.type === "race" && event.description.includes("G1") ? "gold-shimmer border-prestige-gold/20" : ""
+                }`}
             >
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1 shrink-0 mt-0.5">
                 {getEventIcon(event.type)}
                 {event.type === "race" && event.description.includes("G1") && (
                   <Award className="h-3 w-3 text-prestige-gold" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs truncate">{event.description}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] font-mono text-muted-foreground">
+                <p className="text-xs font-medium leading-relaxed text-brand-ivory/90 group-hover:text-brand-ivory transition-colors">
+                  {event.description}
+                </p>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="text-[10px] text-muted-foreground font-medium">
                     {formatTime(event.timestamp)}
                   </span>
                   <span
-                    className={`text-[10px] font-mono flex items-center ${
-                      event.impact >= 0 ? "text-terminal-green" : "text-terminal-red"
-                    }`}
+                    className={`text-[10px] font-bold flex items-center gap-0.5 ${event.impact >= 0 ? "text-terminal-green" : "text-terminal-red"
+                      }`}
                   >
                     {event.impact >= 0 ? (
-                      <ArrowUpRight className="h-2.5 w-2.5" />
+                      <ArrowUpRight className="h-3 w-3" />
                     ) : (
-                      <ArrowDownRight className="h-2.5 w-2.5" />
+                      <ArrowDownRight className="h-3 w-3" />
                     )}
                     {event.impact >= 0 ? "+" : ""}
                     {event.impact}%
@@ -177,56 +130,65 @@ const LiveFeed = () => {
                 </div>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </div>
 
       <div>
-        <h3 className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
+        <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-muted-foreground mb-4">
           Breeding Activity
         </h3>
-        <div className="space-y-1.5">
-          {breedingActivity.map((activity) => (
+        <div className="space-y-2">
+          {breedingActivity.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-3">No breeding activity on chain yet.</p>
+          ) : (
+          breedingActivity.map((activity) => (
             <div
               key={activity.id}
-              className="flex items-start gap-2 p-2 rounded-sm bg-card"
+              className="flex items-start gap-3 p-3 rounded border border-white/5 bg-white/5 hover:bg-white/10 transition-colors"
             >
-              {getEventIcon(activity.type)}
+              <div className="mt-0.5 opacity-80">{getEventIcon(activity.type)}</div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs truncate">{activity.description}</p>
-                <span className="text-[10px] font-mono text-muted-foreground">
+                <p className="text-xs font-medium text-brand-ivory/90">{activity.description}</p>
+                <span className="text-[10px] text-muted-foreground font-medium mt-1 block">
                   {formatTime(activity.timestamp)}
                 </span>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </div>
 
       <div>
-        <h3 className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
+        <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-muted-foreground mb-4">
           Revenue Events
         </h3>
-        <div className="space-y-1.5">
-          {revenueEvents.map((event) => (
+        <div className="space-y-2">
+          {revenueEvents.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-3">No revenue events on chain yet.</p>
+          ) : (
+          revenueEvents.map((event) => (
             <div
               key={event.id}
-              className="flex items-start gap-2 p-2 rounded-sm bg-card"
+              className="flex items-start gap-3 p-3 rounded border border-white/5 bg-white/5 hover:bg-white/10 transition-colors"
             >
-              {getEventIcon(event.type)}
+              <div className="mt-0.5 opacity-80">{getEventIcon(event.type)}</div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs truncate">{event.description}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] font-mono text-muted-foreground">
+                <p className="text-xs font-medium text-brand-ivory/90">{event.description}</p>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="text-[10px] text-muted-foreground font-medium">
                     {formatTime(event.timestamp)}
                   </span>
-                  <span className="text-[10px] font-mono text-terminal-green">
+                  <span className="text-[10px] font-bold text-terminal-green tracking-wide">
                     ${event.amount.toLocaleString()}
                   </span>
                 </div>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </div>
     </div>

@@ -4,15 +4,16 @@
 
 The Connect button uses RainbowKit + WalletConnect. To avoid 400/403 errors:
 
-1. Go to [cloud.walletconnect.com](https://cloud.walletconnect.com) and create a free project.
+1. Go to [cloud.reown.com](https://cloud.reown.com) and create a free project.
 2. Copy the **Project ID** (32 characters).
-3. In the repo root or `app/`, create or edit `.env` and add:
+3. **Add localhost to the allowlist**: In your project → **Project Domains** → **Configure Domains**, add `http://localhost:3000`.
+4. In the repo root or `app/`, create or edit `.env` and add:
    ```bash
    NEXT_PUBLIC_WALLETCONNECT_ID=your_32_character_project_id_here
    ```
-4. Rebuild and restart: `cd app && npm run run`
+5. Rebuild and restart: `cd app && npm run run`
 
-Without this, you may see 400 Bad Request or 403 Forbidden from WalletConnect. You can still use **MetaMask** by choosing the “Injected” or browser wallet option in the connect modal if it appears.
+Without this, you may see "Origin not found on Allowlist" or 400/403 from WalletConnect. You can still use **MetaMask** by choosing the “Injected” or browser wallet option in the connect modal if it appears.
 
 ---
 

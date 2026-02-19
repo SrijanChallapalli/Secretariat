@@ -6,6 +6,8 @@ import { addresses, abis } from "@/lib/contracts";
 import { formatEther } from "viem";
 import { AdiDisplay } from "@/components/AdiDisplay";
 import { MAX_HORSE_ID_TO_FETCH, isOnChainHorse } from "@/lib/on-chain-horses";
+import { mapToHorseHeatmapItem, parseRawHorseData, parseRawListing } from "@/lib/on-chain-mapping";
+import { MarketHeatmap } from "@/components/market/MarketHeatmap";
 
 const HORSE_IDS = Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => i);
 
@@ -20,20 +22,25 @@ type DashboardHorse = {
 };
 
 export default function Dashboard() {
-  const { data } = useReadContracts({
-    contracts: HORSE_IDS.map((id) => ({
-      address: addresses.horseINFT,
-      abi: abis.HorseINFT,
-      functionName: "getHorseData" as const,
-      args: [BigInt(id)] as [bigint],
-    })) as any,
-  });
+  const horseCalls = HORSE_IDS.map((id) => ({
+    address: addresses.horseINFT,
+    abi: abis.HorseINFT,
+    functionName: "getHorseData" as const,
+    args: [BigInt(id)] as [bigint],
+  }));
+  const listingCalls = HORSE_IDS.map((id) => ({
+    address: addresses.breedingMarketplace,
+    abi: abis.BreedingMarketplace,
+    functionName: "listings" as const,
+    args: [BigInt(id)] as [bigint],
+  }));
+  const { data: horsesData } = useReadContracts({ contracts: horseCalls as any });
+  const { data: listingsData } = useReadContracts({ contracts: listingCalls as any });
 
   const horses = useMemo<DashboardHorse[]>(() => {
+    if (!horsesData) return [];
 
-    if (!data) return [];
-
-    const loaded = data
+    const loaded = horsesData
       .map((c, idx) => {
         if (c.status !== "success" || !c.result || !isOnChainHorse(c.result)) return null;
         const r = c.result as any;
@@ -57,7 +64,7 @@ export default function Dashboard() {
       .filter(Boolean) as DashboardHorse[];
 
     return loaded;
-  }, [data]);
+  }, [horsesData]);
 
   const totalMarketADI = horses.reduce(
     (acc, h) => acc + h.valuationADI,
@@ -91,7 +98,24 @@ export default function Dashboard() {
         ? -1
         : 1,
   );
-  const heatmapHorses = sortedByVal.slice(0, 12);
+  const heatmapHorses = useMemo(() => {
+    if (!horsesData || !listingsData) return [];
+    const out: ReturnType<typeof mapToHorseHeatmapItem>[] = [];
+    for (let i = 0; i < HORSE_IDS.length; i++) {
+      const hRes = horsesData[i];
+      const lRes = listingsData[i];
+      if (hRes?.status !== "success" || !hRes.result || !isOnChainHorse(hRes.result))
+        continue;
+      const raw = parseRawHorseData(hRes.result);
+      if (!raw) continue;
+      const listing =
+        lRes?.status === "success" && lRes.result
+          ? parseRawListing(lRes.result)
+          : null;
+      out.push(mapToHorseHeatmapItem(HORSE_IDS[i], raw, listing));
+    }
+    return out;
+  }, [horsesData, listingsData]);
   const topValuations = sortedByVal.slice(0, 4);
   const lowestValuations = sortedByVal.slice(-4).reverse();
 
@@ -170,54 +194,7 @@ export default function Dashboard() {
       </section>
 
       <section className="space-y-6">
-        <div className="flex items-center justify-between pb-2 border-b border-white/5">
-          <h2 className="text-xl font-heading font-semibold text-brand-ivory tracking-wide">
-            Market Heatmap
-          </h2>
-          <span className="text-xs font-sans text-muted-foreground/60 tracking-wider">
-            BLOODLINE DEPTH · 24H ORACLE IMPACT
-          </span>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {heatmapHorses.map((horse) => (
-            <div
-              key={horse.name}
-              className="rounded-lg border border-sidebar-border/40 bg-card/50 hover:bg-card hover:border-prestige-gold/30 p-5 flex flex-col justify-between transition-all duration-300 group"
-            >
-              <div className="flex items-start justify-between gap-2 mb-4">
-                <div>
-                  <p className="text-lg font-heading font-medium text-brand-ivory group-hover:text-prestige-gold transition-colors">
-                    {horse.name}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground font-sans tracking-widest uppercase mt-0.5">
-                    Token #{horse.tokenId}
-                  </p>
-                </div>
-                {horse.retired ? (
-                  <span className="px-2 py-1 rounded text-[10px] font-medium uppercase tracking-wider bg-terminal-amber/10 text-terminal-amber border border-terminal-amber/20">
-                    Retired
-                  </span>
-                ) : horse.injured ? (
-                  <span className="px-2 py-1 rounded text-[10px] font-medium uppercase tracking-wider bg-terminal-red/10 text-terminal-red border border-terminal-red/20">
-                    Injured
-                  </span>
-                ) : horse.breedingAvailable ? (
-                  <span className="px-2 py-1 rounded text-[10px] font-medium uppercase tracking-wider bg-terminal-green/10 text-terminal-green border border-terminal-green/20">
-                    Stud Ready
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex items-end justify-between border-t border-white/5 pt-3">
-                <span className="text-sm font-sans font-medium text-brand-ivory/90">
-                  <AdiDisplay value={horse.valuationADI} showSuffix />
-                </span>
-                <span className="text-[10px] font-sans text-muted-foreground bg-white/5 px-2 py-0.5 rounded-full">
-                  Pedigree {(horse.pedigreeScore / 100).toFixed(1)}%
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <MarketHeatmap horses={heatmapHorses} />
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">

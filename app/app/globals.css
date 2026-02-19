@@ -4,57 +4,68 @@
 
 @layer base {
   :root {
-    --font-geist-sans: "Geist", system-ui, sans-serif;
-    --font-geist-mono: "Geist Mono", monospace;
+    /* Fonts managed via next/font in layout.tsx */
+    
+    /* Background: Deep Mahogany/Espresso */
+    --background: 0 30% 10%;
+    /* Foreground: Ivory/Warm White */
+    --foreground: 40 30% 88%;
 
-    --background: 220 25% 6%;
-    --foreground: 210 15% 85%;
+    /* Cards: Darker Brown */
+    --card: 0 30% 8%;
+    --card-foreground: 40 30% 88%;
 
-    --card: 220 20% 10%;
-    --card-foreground: 210 15% 85%;
+    /* Popover: Darker Brown */
+    --popover: 0 30% 8%;
+    --popover-foreground: 40 30% 88%;
 
-    --popover: 220 20% 10%;
-    --popover-foreground: 210 15% 85%;
+    /* Primary: Gold */
+    --primary: 42 60% 57%;
+    --primary-foreground: 0 30% 10%;
 
-    --primary: 160 80% 38%;
-    --primary-foreground: 220 25% 6%;
+    /* Secondary: Hunter Green */
+    --secondary: 160 60% 20%;
+    --secondary-foreground: 40 30% 88%;
 
-    --secondary: 220 15% 18%;
-    --secondary-foreground: 210 15% 85%;
+    /* Muted: Dark Brown */
+    --muted: 0 20% 15%;
+    --muted-foreground: 42 40% 60%;
 
-    --muted: 220 15% 15%;
-    --muted-foreground: 215 10% 50%;
+    /* Accent: Dark Green/Gold Mix */
+    --accent: 160 50% 15%;
+    --accent-foreground: 42 60% 57%;
 
-    --accent: 190 100% 45%;
-    --accent-foreground: 220 25% 6%;
+    /* Destructive: Deep Red */
+    --destructive: 0 70% 40%;
+    --destructive-foreground: 40 30% 95%;
 
-    --destructive: 350 90% 55%;
-    --destructive-foreground: 210 15% 95%;
-
-    --border: 220 15% 20%;
-    --input: 220 15% 18%;
-    --ring: 160 80% 38%;
+    /* Border: Gold/Brown */
+    --border: 42 30% 20%;
+    --input: 0 25% 12%;
+    --ring: 42 60% 57%;
 
     --radius: 0.375rem;
 
-    --terminal-green: 160 80% 38%;
-    --terminal-red: 350 90% 55%;
-    --terminal-amber: 40 95% 55%;
-    --terminal-cyan: 190 100% 45%;
+    /* Terminal colors adjusted for heritage feeling */
+    --terminal-green: 160 60% 40%;
+    --terminal-red: 0 70% 50%;
+    --terminal-amber: 40 80% 60%;
+    --terminal-cyan: 190 60% 45%;
 
+    /* Custom Heritage Colors */
     --heritage-walnut: 18 33% 19%;
     --heritage-walnut-light: 18 28% 25%;
     --prestige-gold: 42 75% 55%;
     --prestige-gold-muted: 42 50% 40%;
 
-    --sidebar-background: 220 25% 5%;
-    --sidebar-foreground: 210 15% 60%;
-    --sidebar-primary: 160 80% 38%;
-    --sidebar-primary-foreground: 220 25% 6%;
-    --sidebar-accent: 220 15% 12%;
-    --sidebar-accent-foreground: 210 15% 85%;
-    --sidebar-border: 220 15% 15%;
-    --sidebar-ring: 160 80% 38%;
+    --sidebar-background: 0 30% 8%;
+    --sidebar-foreground: 40 20% 70%;
+    --sidebar-primary: 42 60% 57%;
+    --sidebar-primary-foreground: 0 30% 10%;
+    --sidebar-accent: 0 25% 12%;
+    --sidebar-accent-foreground: 42 60% 57%;
+    --sidebar-border: 42 30% 15%;
+    --sidebar-ring: 42 60% 57%;
 
     --brand-ivory: 40 30% 88%;
     --brand-gold: 42 60% 57%;
