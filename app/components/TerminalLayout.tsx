@@ -11,14 +11,10 @@ import {
   Bot,
   Radio,
   Settings,
-  Search,
-  Wallet,
-  Circle,
 } from "lucide-react";
 import { useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
-import { Input } from "@/components/ui/input";
 import LiveFeed from "@/components/LiveFeed";
 
 const navItems = [
@@ -92,13 +88,7 @@ export function TerminalLayout({ children }: TerminalLayoutProps) {
 
       <div className="flex-1 flex flex-col overflow-hidden bg-[url('/noise.png')]">
         <header className="h-16 border-b border-white/5 flex items-center px-6 gap-6 shrink-0 bg-background/80 backdrop-blur-md">
-          <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-            <Input
-              placeholder="Search bloodlines, horses, owners..."
-              className="h-9 pl-10 bg-white/5 border-white/5 text-sm font-sans text-brand-ivory placeholder:text-muted-foreground/40 rounded-full focus:bg-white/10 focus:border-white/10 transition-all"
-            />
-          </div>
+          <div className="flex-1" />
 
           <button
             type="button"

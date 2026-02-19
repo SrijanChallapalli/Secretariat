@@ -5,11 +5,11 @@
 export interface PortfolioHolding {
   asset: string;
   horseId: number;
-  shares: number;
-  totalShares: number;
-  value: number;
+  shares: bigint;
+  totalShares: bigint;
+  value: bigint;
   pnlPct: number;
-  claimable: number;
+  claimable: bigint;
 }
 
 export interface PortfolioKPIs {
@@ -25,12 +25,12 @@ export interface TopPerformer {
   asset: string;
   horseId: number;
   pnlPct: number;
-  shares: number;
-  value: number;
+  shares: bigint;
+  value: bigint;
 }
 
 export interface RevenueBreakdownItem {
   asset: string;
   horseId: number;
-  claimable: number;
+  claimable: bigint;
 }

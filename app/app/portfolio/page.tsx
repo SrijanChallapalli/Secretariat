@@ -2,7 +2,6 @@
 
 import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
-import { formatEther } from "viem";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { formatMoneyFull } from "@/lib/format";
@@ -12,6 +11,7 @@ import type {
   TopPerformer,
   RevenueBreakdownItem,
 } from "@/data/mockPortfolio";
+import { MAX_HORSE_ID_TO_FETCH } from "@/lib/on-chain-horses";
 
 const vaultAbi = [
   "function claimableFor(address) view returns (uint256)",
@@ -29,7 +29,7 @@ export default function PortfolioPage() {
   });
 
   const horseCalls = address
-    ? [0, 1, 2, 3, 4, 5].map((i) => ({
+    ? Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => ({
         address: addresses.horseINFT,
         abi: abis.HorseINFT,
         functionName: "ownerOf" as const,
@@ -119,11 +119,13 @@ export default function PortfolioPage() {
   const holdings: PortfolioHolding[] = revenueRows.map((r) => ({
     asset: `Horse #${r.horseId}`,
     horseId: r.horseId,
-    shares: Number(r.balance),
-    totalShares: 10000,
-    value: Number(r.claimable) / 1e18 * 2,
+    // keep on-chain quantities as bigint and format at render time
+    shares: r.balance,
+    totalShares: 10000n,
+    // value is 2x claimable in wei to preserve exact arithmetic
+    value: r.claimable * 2n,
     pnlPct: 0,
-    claimable: Number(r.claimable) / 1e18,
+    claimable: r.claimable,
   }));
 
   const totalClaimable = revenueRows.reduce(
@@ -132,7 +134,8 @@ export default function PortfolioPage() {
   );
 
   const kpis: PortfolioKPIs = {
-    totalValue: holdings.reduce((a, h) => a + h.value, 0),
+    // totalValue is 2x total claimable (in ADI) converted for display
+    totalValue: Number(totalClaimable * 2n) / 1e18,
     totalValueDeltaPct: 0,
     claimableRevenue: Number(totalClaimable) / 1e18,
     activeRights: vaults.length,
@@ -147,22 +150,20 @@ export default function PortfolioPage() {
         ) as TopPerformer
       : null;
 
-  const revenueBreakdown: RevenueBreakdownItem[] = holdings.map((h) => ({
-    asset: h.asset,
-    horseId: h.horseId,
-    claimable: h.claimable,
+  const revenueBreakdown: RevenueBreakdownItem[] = revenueRows.map((r) => ({
+    asset: `Horse #${r.horseId}`,
+    horseId: r.horseId,
+    claimable: r.claimable,
   }));
 
   const maxRevenue = Math.max(
-    ...revenueBreakdown.map((r) => r.claimable),
+    ...revenueBreakdown.map((r) => Number(r.claimable)),
     1,
   );
 
   const handleClaim = (horseId: number) => {
-    console.log("Claim", horseId);
-    if (typeof window !== "undefined" && (window as any).toast) {
-      (window as any).toast(`Claim initiated for Horse #${horseId}`);
-    }
+    // TODO: wire to claim transaction
+    console.log(`Claim initiated for Horse #${horseId}`);
   };
 
   return (
@@ -301,7 +302,7 @@ export default function PortfolioPage() {
                             {row.shares}/{row.totalShares.toLocaleString()}
                           </td>
                           <td className="py-4 px-4 text-foreground">
-                            {formatMoneyFull(row.value)}
+                            {formatMoneyFull(Number(row.value) / 1e18)}
                           </td>
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-2">
@@ -332,7 +333,7 @@ export default function PortfolioPage() {
                             </div>
                           </td>
                           <td className="py-4 px-4 font-semibold text-prestige-gold">
-                            {formatMoneyFull(row.claimable)}
+                            {formatMoneyFull(Number(row.claimable) / 1e18)}
                           </td>
                           <td className="py-4 px-4 text-right">
                             <button
@@ -384,8 +385,8 @@ export default function PortfolioPage() {
                       />
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground pt-1">
-                      <span>{topPerformer.shares} shares</span>
-                      <span>{formatMoneyFull(topPerformer.value)}</span>
+                      <span>{String(topPerformer.shares)} shares</span>
+                      <span>{formatMoneyFull(Number(topPerformer.value) / 1e18)}</span>
                     </div>
                   </div>
                 </div>
@@ -413,14 +414,14 @@ export default function PortfolioPage() {
                             className="h-full rounded-full bg-prestige-gold"
                             style={{
                               width: `${Math.max(
-                                (item.claimable / maxRevenue) * 100,
+                                (Number(item.claimable) / maxRevenue) * 100,
                                 8,
                               )}%`,
                             }}
                           />
                         </div>
                         <span className="w-20 text-right font-semibold text-prestige-gold shrink-0">
-                          {formatMoneyFull(item.claimable)}
+                          {formatMoneyFull(Number(item.claimable) / 1e18)}
                         </span>
                       </div>
                     ))

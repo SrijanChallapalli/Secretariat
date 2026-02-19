@@ -4,9 +4,9 @@ import { useSearchParams } from "next/navigation";
 import {
   useAccount,
   useChainId,
-  useReadContracts,
   useWriteContract,
   useSignTypedData,
+  useReadContract,
 } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
 import { useState, useMemo } from "react";
@@ -21,10 +21,9 @@ import {
   parseAbiParameters,
   keccak256,
   toHex,
+  formatEther,
 } from "viem";
 import { PedigreeTree } from "@/components/PedigreeTree";
-import { useReadContract } from "wagmi";
-import { MAX_HORSE_ID_TO_FETCH, isOnChainHorse } from "@/lib/on-chain-horses";
 import { StudBookHeader } from "@/components/breeding/StudBookHeader";
 import {
   MareSelectList,
@@ -38,6 +37,7 @@ import {
   ExecutionTimeline,
   type TimelineStepId,
 } from "@/components/breeding/ExecutionTimeline";
+import { useHorsesWithListings } from "@/lib/hooks/useHorsesWithListings";
 
 const BREEDING_PLAN_TYPE = {
   BreedingPlan: [
@@ -68,40 +68,41 @@ function mapRecommendationToDisplay(
     ? String(stallion.name)
     : `Stallion #${rec.stallionTokenId}`;
 
-  const match = Math.round(rec.score * 100);
-  const projEdge =
-    (rec.explainability.traitMatch + rec.explainability.pedigreeSynergy) * 50 -
-    50;
-  const soundnessDelta = stallion?.injured ? -2 : 0;
-  const confidence = Math.round(rec.score * 100);
-
-  const explanationParts: string[] = [];
-  if (rec.riskFlags.length === 0) {
-    explanationParts.push(
-      "Strong pedigree cross with complementary traits. Low-risk pairing."
-    );
-  } else {
-    explanationParts.push(
-      rec.riskFlags.length > 0
-        ? `Consider: ${rec.riskFlags.join(", ")}.`
-        : ""
-    );
-  }
   const explanation =
-    explanationParts.join(" ").trim() ||
-    "Compatibility based on trait match and pedigree synergy.";
+    rec.riskFlags.length === 0
+      ? "Strong pedigree cross with complementary traits. Low-risk pairing."
+      : `Consider: ${rec.riskFlags.join(", ")}.`;
 
   return {
     stallionTokenId: rec.stallionTokenId,
     stallionName: name,
     rank,
     badge: BADGES[rank - 1],
-    match,
-    projEdge,
-    soundnessDelta,
-    confidence,
+    match: Math.round(rec.score * 100),
+    projEdge:
+      (rec.explainability.traitMatch + rec.explainability.pedigreeSynergy) *
+        50 -
+      50,
+    soundnessDelta: stallion?.injured ? -2 : 0,
+    confidence: Math.round(rec.score * 100),
     explanation,
   };
+}
+
+function toHorseTraits(
+  horsesWithListings: ReturnType<typeof useHorsesWithListings>
+): HorseTraits[] {
+  return horsesWithListings.map(({ tokenId, raw, listing }) => ({
+    tokenId,
+    name: raw.name || `Horse #${tokenId}`,
+    traitVector: Array.isArray(raw.traitVector)
+      ? raw.traitVector.map(Number)
+      : [],
+    pedigreeScore: raw.pedigreeScore,
+    valuationADI: raw.valuationADI,
+    injured: raw.injured,
+    studFeeADI: listing?.studFeeADI ?? 0n,
+  }));
 }
 
 export default function BreedPage() {
@@ -111,75 +112,37 @@ export default function BreedPage() {
   const chainId = useChainId();
   const { address } = useAccount();
   const [mareId, setMareId] = useState<string>(stallionParam ? "" : "1");
-  const [offspringName, setOffspringName] = useState("");
   const [picks, setPicks] = useState<Recommendation[] | null>(null);
-  const [selectedStallionId, setSelectedStallionId] = useState<number | null>(
-    null
-  );
+  const [selectedStallionId, setSelectedStallionId] = useState<number | null>(null);
   const [directBreedName, setDirectBreedName] = useState("");
   const [timelineStep, setTimelineStep] = useState<TimelineStepId>("approve_adi");
 
-  const horseIds = Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => i);
-  const horseCalls = horseIds.map((id) => ({
-    address: addresses.horseINFT,
-    abi: abis.HorseINFT,
-    functionName: "getHorseData" as const,
-    args: [BigInt(id)] as [bigint],
-  }));
-  const listingCalls = horseIds.map((id) => ({
-    address: addresses.breedingMarketplace,
-    abi: abis.BreedingMarketplace,
-    functionName: "listings" as const,
-    args: [BigInt(id)] as [bigint],
-  }));
-  const { data: horsesData } = useReadContracts({ contracts: horseCalls as any });
-  const { data: listingsData } = useReadContracts({
-    contracts: listingCalls as any,
-  });
-
-  const horses: HorseTraits[] = (horsesData ?? [])
-    .map((c, i) => {
-      if (c.status !== "success" || !c.result || !isOnChainHorse(c.result))
-        return null;
-      const r = c.result as any;
-      if (!r[4]) return null;
-      const list = listingsData?.[i];
-      const studFee =
-        list && list.status === "success" ? (list.result as any)[0] : 0n;
-      return {
-        tokenId: i,
-        name: r[0],
-        traitVector: (r[4] as number[]).map(Number),
-        pedigreeScore: Number(r[5]),
-        valuationADI: r[6],
-        injured: r[8],
-        studFeeADI: studFee,
-      };
-    })
-    .filter(Boolean) as HorseTraits[];
+  const horsesWithListings = useHorsesWithListings();
+  const horses = useMemo(
+    () => toHorseTraits(horsesWithListings),
+    [horsesWithListings]
+  );
 
   const mare = horses.find((h) => h.tokenId === Number(mareId));
   const stallions = horses.filter(
-    (h) => h.tokenId !== Number(mareId) && (h as any).studFeeADI > 0n
+    (h) => h.tokenId !== Number(mareId) && (h.studFeeADI ?? 0n) > 0n
   );
 
   const mares: MareItem[] = useMemo(() => {
-    const sorted = [...horses].sort(
-      (a, b) => b.pedigreeScore - a.pedigreeScore
-    );
+    const sorted = [...horses].sort((a, b) => b.pedigreeScore - a.pedigreeScore);
     const topIds = new Set(sorted.slice(0, 3).map((h) => h.tokenId));
     return horses.map((h) => ({
       id: h.tokenId,
       name: String(h.name || `Horse #${h.tokenId}`),
       pedigree: Math.round(h.pedigreeScore / 100),
-      valuation: Number(h.valuationADI) / 1e18,
+      valuation: Number(formatEther(BigInt(h.valuationADI))),
       isTopMare: topIds.has(h.tokenId),
     }));
   }, [horses]);
 
   const breedingPicksDisplay: BreedingPickDisplay[] = useMemo(() => {
     if (!picks || picks.length === 0) return [];
-    return picks.map((p, idx) =>
+    return picks.slice(0, 3).map((p, idx) =>
       mapRecommendationToDisplay(p, stallions, (idx + 1) as 1 | 2 | 3)
     );
   }, [picks, stallions]);
@@ -187,8 +150,7 @@ export default function BreedPage() {
   const getRecommendations = () => {
     if (!mare) return;
     const maxFee = 1000n * BigInt(1e18);
-    const recs = scoreStallions(mare, stallions, maxFee);
-    setPicks(recs);
+    setPicks(scoreStallions(mare, stallions, maxFee));
     setTimelineStep("sign_eip712");
   };
 
@@ -255,9 +217,7 @@ export default function BreedPage() {
       toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
     );
     const purchaseSeed = keccak256(
-      toHex(
-        new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`)
-      )
+      toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
     );
     await executePlan({
       address: addresses.agentExecutor,
@@ -299,6 +259,10 @@ export default function BreedPage() {
     setSelectedStallionId(stallionId);
     setTimelineStep("purchase_right");
   };
+
+  const nameValidation = directBreedName
+    ? validateHorseName(directBreedName)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -369,9 +333,7 @@ export default function BreedPage() {
                       </span>
                     ) : (
                       <button
-                        onClick={() =>
-                          handlePurchaseRight(selectedStallionId)
-                        }
+                        onClick={() => handlePurchaseRight(selectedStallionId)}
                         className="px-3 py-1.5 rounded-md bg-secondary text-xs font-mono hover:bg-secondary/80 transition-colors"
                       >
                         Purchase breeding right
@@ -383,33 +345,27 @@ export default function BreedPage() {
                       <input
                         placeholder="Offspring name"
                         className={`w-full px-3 py-2 rounded-md bg-secondary text-sm border ${
-                          directBreedName &&
-                          !validateHorseName(directBreedName).valid
+                          nameValidation && !nameValidation.valid
                             ? "border-destructive/60"
                             : "border-border"
                         }`}
                         value={directBreedName}
                         onChange={(e) => setDirectBreedName(e.target.value)}
                       />
-                      {directBreedName &&
-                        !validateHorseName(directBreedName).valid && (
-                          <p className="text-[10px] text-destructive">
-                            {validateHorseName(directBreedName).errors.join(
-                              "; "
-                            )}
-                          </p>
-                        )}
-                      {directBreedName &&
-                        validateHorseName(directBreedName).valid && (
-                          <p className="text-[10px] text-terminal-green">
-                            Name valid (Jockey Club rules)
-                          </p>
-                        )}
+                      {nameValidation && !nameValidation.valid && (
+                        <p className="text-[10px] text-destructive">
+                          {nameValidation.errors.join("; ")}
+                        </p>
+                      )}
+                      {nameValidation?.valid && (
+                        <p className="text-[10px] text-terminal-green">
+                          Name valid (Jockey Club rules)
+                        </p>
+                      )}
                       <button
                         onClick={handleDirectBreed}
                         disabled={
-                          !directBreedName ||
-                          !validateHorseName(directBreedName).valid
+                          !directBreedName || !nameValidation?.valid
                         }
                         className="w-full px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >

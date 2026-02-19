@@ -10,7 +10,6 @@ export default function AgentPage() {
 
   const handleRefresh = () => {
     // TODO: Refetch agent metadata when API/contract integration exists
-    console.log("refresh");
   };
 
   const handleDownload = () => {
