@@ -9,6 +9,27 @@ git clone <repo-url> && cd Secretariat
 npm run setup          # copies .env, installs deps, prints next steps
 ```
 
+### Local testing (no testnet credentials)
+
+To test **every feature** without testnet gas or 0G uploader keys:
+
+```bash
+npm run test:local     # Anvil + deploy + seed + dev (one command)
+```
+
+This starts a local chain, deploys contracts, seeds horses/listings, and runs the app. Connect your wallet → add network `127.0.0.1:8545` chain ID `31337` → switch to "Anvil Local". All features work: breeding, marketplace, agent, valuation, mock 0G storage.
+
+Manual steps (if you prefer):
+
+```bash
+anvil &                # in another terminal
+npm run deploy:local   # deploy to Anvil
+npm run seed:local     # seed demo data
+npm run dev            # start app + server (set LOCAL_TESTING=true in .env)
+```
+
+### Testnet deployment
+
 Then fill in the two required values in `.env`:
 
 | Variable | Where to get it |
@@ -70,6 +91,10 @@ scripts/     Deploy, seed, and utility scripts
 | `npm run lint` | Lint all workspaces |
 | `npm run format` | Format with Prettier |
 | `npm run check` | Full quality gate (build + forge) |
+| `npm run test:local` | **Local testing** — Anvil + deploy + seed + dev (no testnet) |
+| `npm run deploy:local` | Deploy to local Anvil (requires `anvil` running) |
+| `npm run seed:local` | Seed demo data to local chain |
+| `npm run test:contracts` | Run Foundry contract tests |
 | `npm run deploy:og` | Deploy contracts to 0G Galileo |
 | `npm run deploy:adi` | Deploy contracts to ADI Testnet |
 | `npm run env:from-broadcast` | Auto-fill contract addresses from deploy |

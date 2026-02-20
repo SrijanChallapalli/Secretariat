@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Trophy } from "lucide-react";
+import { Trophy, Dna } from "lucide-react";
 import { PedigreeTree } from "@/components/PedigreeTree";
 import type { HorseFullData } from "@/data/mockHorses";
 
@@ -9,8 +9,20 @@ interface BreedingTabProps {
   horse: HorseFullData;
 }
 
+function isStallion(horse: HorseFullData): boolean {
+  const { breedingListing } = horse;
+  return (
+    breedingListing.studFee !== "—" &&
+    breedingListing.remainingUses > 0
+  );
+}
+
 export function BreedingTab({ horse }: BreedingTabProps) {
-  const { breedingListing, breedingPicks } = horse;
+  const { breedingListing } = horse;
+  const stallion = isStallion(horse);
+  const breedHref = stallion
+    ? `/breed?stallion=${horse.id}&advisor=1`
+    : `/breed?mare=${horse.id}&advisor=1`;
 
   return (
     <div className="space-y-6">
@@ -49,12 +61,14 @@ export function BreedingTab({ horse }: BreedingTabProps) {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          className="px-4 py-2 rounded-md border border-prestige-gold/50 text-foreground hover:bg-prestige-gold/10 transition-colors text-sm"
-        >
-          Purchase Breeding Right
-        </button>
+        {stallion && (
+          <Link
+            href={breedHref}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-prestige-gold/50 text-foreground hover:bg-prestige-gold/10 transition-colors text-sm"
+          >
+            Purchase Breeding Right
+          </Link>
+        )}
       </div>
 
       <div className="rounded-lg border border-white/10 bg-black/20 p-5">
@@ -64,79 +78,18 @@ export function BreedingTab({ horse }: BreedingTabProps) {
             AI BREEDING ADVISOR
           </h3>
         </div>
-        <div className="space-y-3 mb-4">
-          {breedingPicks.map((pick) => (
-            <div
-              key={pick.rank}
-              className={`flex items-center justify-between py-3 px-4 rounded-md ${
-                pick.rank === 1 ? "bg-white/5 border border-white/10" : ""
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={
-                    pick.rank === 1
-                      ? "text-prestige-gold font-bold"
-                      : "text-muted-foreground"
-                  }
-                >
-                  #{pick.rank}
-                </span>
-                <span className="text-foreground">{pick.name}</span>
-              </div>
-              <div className="flex items-center gap-4 text-sm">
-                <span>
-                  Match:{" "}
-                  <span className="text-terminal-green font-medium">
-                    {pick.match}
-                  </span>
-                </span>
-                <span>
-                  Edge:{" "}
-                  <span className="text-terminal-green font-medium">
-                    +{pick.edge}%
-                  </span>
-                </span>
-                <span>
-                  Δ:{" "}
-                  <span
-                    className={
-                      pick.delta >= 0
-                        ? "text-terminal-green"
-                        : "text-terminal-red"
-                    }
-                  >
-                    {pick.delta >= 0 ? "+" : ""}
-                    {pick.delta}
-                  </span>
-                </span>
-                <span
-                  className={
-                    pick.confidence === "High"
-                      ? "text-prestige-gold"
-                      : "text-terminal-amber"
-                  }
-                >
-                  {pick.confidence}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-3">
-          <Link
-            href="/breed"
-            className="text-sm text-muted-foreground hover:text-prestige-gold transition-colors"
-          >
-            Open Stud Book
-          </Link>
-          <button
-            type="button"
-            className="px-4 py-2 rounded-md border border-prestige-gold/50 bg-prestige-gold/5 text-foreground hover:bg-prestige-gold/10 transition-colors text-sm font-medium"
-          >
-            Execute With Approval
-          </button>
-        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          {stallion
+            ? "Breed your mare with this stallion. Go to the Breeding Lab to select your mare and get AI pairing recommendations."
+            : "Breed this mare with a stallion. Go to the Breeding Lab to get AI pairing recommendations and execute."}
+        </p>
+        <Link
+          href={breedHref}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-prestige-gold text-background font-medium hover:bg-prestige-gold/90 transition-colors text-sm"
+        >
+          <Dna className="h-4 w-4" />
+          {stallion ? "Breed with this stallion" : "Breed this mare"}
+        </Link>
       </div>
 
       <div className="rounded-lg border border-white/10 bg-black/20 p-5">

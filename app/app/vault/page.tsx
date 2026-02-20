@@ -5,6 +5,7 @@ import { addresses, abis } from "@/lib/contracts";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { MAX_HORSE_ID_TO_FETCH } from "@/lib/on-chain-horses";
+import { parseRawHorseData } from "@/lib/on-chain-mapping";
 
 export default function VaultIndexPage() {
   const { address } = useAccount();
@@ -54,6 +55,29 @@ export default function VaultIndexPage() {
         return { horseId: myHorses[i], address: addr as `0x${string}` };
       })
       .filter(Boolean) as { horseId: number; address: `0x${string}` }[]) ?? [];
+
+  const horseDataCalls =
+    vaults.length > 0
+      ? vaults.map((v) => ({
+          address: addresses.horseINFT,
+          abi: abis.HorseINFT,
+          functionName: "getHorseData" as const,
+          args: [BigInt(v.horseId)] as [bigint],
+        }))
+      : [];
+
+  const { data: horseDataResults } = useReadContracts({
+    contracts: horseDataCalls as any,
+  });
+
+  const horseNames: Record<number, string> = {};
+  horseDataResults?.forEach((res, i) => {
+    const horseId = vaults[i]?.horseId;
+    if (horseId != null && res?.status === "success") {
+      const raw = parseRawHorseData(res.result);
+      horseNames[horseId] = raw?.name?.trim() || `Horse #${horseId}`;
+    }
+  });
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -121,7 +145,7 @@ export default function VaultIndexPage() {
                         href={`/horse/${v.horseId}`}
                         className="font-semibold text-foreground hover:text-prestige-gold transition-colors"
                       >
-                        Horse #{v.horseId}
+                        {horseNames[v.horseId] ?? `Horse #${v.horseId}`}
                       </Link>
                     </td>
                     <td className="py-4 px-4 font-mono text-muted-foreground text-xs">

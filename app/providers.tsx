@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, http } from "wagmi";
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from "@rainbow-me/rainbowkit";
-import { ogGalileo, adiTestnet } from "@/lib/chains";
+import { anvilLocal, ogGalileo, adiTestnet } from "@/lib/chains";
 import { env } from "@/lib/env";
 import "@rainbow-me/rainbowkit/styles.css";
 
@@ -15,8 +15,9 @@ const projectId = env.NEXT_PUBLIC_WALLETCONNECT_ID.length === 32
 const config = getDefaultConfig({
   appName: "Secretariat",
   projectId,
-  chains: [ogGalileo, adiTestnet],
+  chains: [anvilLocal, ogGalileo, adiTestnet],
   transports: {
+    [anvilLocal.id]: http(anvilLocal.rpcUrls.default.http[0]),
     [ogGalileo.id]: http(ogGalileo.rpcUrls.default.http[0]),
     [adiTestnet.id]: http(adiTestnet.rpcUrls.default.http[0]),
   },
@@ -40,7 +41,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             accentColorForeground: "#1a0f0a",
             borderRadius: "medium",
           })}
-          initialChain={ogGalileo}
+          initialChain={process.env.NEXT_PUBLIC_CHAIN_ID === "31337" ? anvilLocal : ogGalileo}
         >
           {children}
         </RainbowKitProvider>

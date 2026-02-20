@@ -14,3 +14,4 @@ line_length = 120
 [rpc_endpoints]
 og = "https://evmrpc-testnet.0g.ai"
 adi = "https://rpc.ab.testnet.adifoundation.ai/"
+local = "http://127.0.0.1:8545"

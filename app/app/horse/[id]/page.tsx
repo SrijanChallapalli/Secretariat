@@ -151,6 +151,11 @@ export default function HorseDetailPage() {
         horse={horse}
         onBuyShares={handleBuyShares}
         onPurchaseBreedingRight={handlePurchaseBreedingRight}
+        breedHref={
+          horse.breedingListing.studFee !== "—" && horse.breedingListing.remainingUses > 0
+            ? `/breed?stallion=${horse.id}&advisor=1`
+            : `/breed?mare=${horse.id}&advisor=1`
+        }
       />
 
       <div className="rounded-lg border border-white/10 bg-black/20 p-5">

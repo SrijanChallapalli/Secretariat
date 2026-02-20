@@ -1,5 +1,13 @@
 import { defineChain } from "viem";
 
+/** Local Anvil chain — use for testing without testnet credentials */
+export const anvilLocal = defineChain({
+  id: 31337,
+  name: "Anvil Local",
+  nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: ["http://127.0.0.1:8545"] } },
+});
+
 export const ogGalileo = defineChain({
   id: 16602,
   name: "0G Galileo Testnet",
@@ -21,4 +29,4 @@ export const adiTestnet = defineChain({
   blockExplorers: { default: { name: "ADI", url: "https://ab.testnet.adifoundation.ai" } },
 });
 
-export const chains = [ogGalileo, adiTestnet] as const;
+export const chains = [anvilLocal, ogGalileo, adiTestnet] as const;

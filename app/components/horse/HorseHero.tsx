@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { formatMoney, formatPercent, shortenAddress, pctColorClass } from "@/lib/format";
 import type { HorseDetail } from "@/data/mockHorses";
-import { Zap, BookOpen } from "lucide-react";
+import { Zap, BookOpen, Dna } from "lucide-react";
+
+interface HorseHeroProps {
+  horse: HorseDetail;
+  onBuyShares?: () => void;
+  onPurchaseBreedingRight?: () => void;
+  onOpenStudBook?: () => void;
+  /** When provided, used for breed CTA. Pass e.g. /breed?mare=1 or /breed?stallion=2 */
+  breedHref?: string;
+}
 
 const COLOR_MAP: Record<string, string> = {
   blue: "bg-blue-500",
@@ -16,18 +25,12 @@ const COLOR_MAP: Record<string, string> = {
   "dark-orange": "bg-amber-700",
 };
 
-interface HorseHeroProps {
-  horse: HorseDetail;
-  onBuyShares?: () => void;
-  onPurchaseBreedingRight?: () => void;
-  onOpenStudBook?: () => void;
-}
-
 export function HorseHero({
   horse,
   onBuyShares,
   onPurchaseBreedingRight,
   onOpenStudBook,
+  breedHref,
 }: HorseHeroProps) {
   const dotColor = COLOR_MAP[horse.color] ?? "bg-gray-500";
 
@@ -73,6 +76,15 @@ export function HorseHero({
           >
             Buy Shares
           </button>
+          {breedHref && (
+            <Link
+              href={breedHref}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-prestige-gold text-background font-medium hover:bg-prestige-gold/90 transition-colors"
+            >
+              <Dna className="h-3.5 w-3.5" />
+              Breed
+            </Link>
+          )}
           <button
             type="button"
             onClick={onPurchaseBreedingRight}
@@ -82,7 +94,7 @@ export function HorseHero({
             Purchase Breeding Right
           </button>
           <Link
-            href="/breed"
+            href={breedHref ?? "/breed"}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-prestige-gold/50 text-foreground hover:bg-prestige-gold/10 transition-colors"
           >
             <BookOpen className="h-3.5 w-3.5" />

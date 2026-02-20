@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePublicClient } from "wagmi";
+import Link from "next/link";
+import { usePublicClient, useReadContracts } from "wagmi";
 import { parseAbiItem, formatEther } from "viem";
-import { addresses } from "@/lib/contracts";
+import { addresses, abis } from "@/lib/contracts";
+import { parseRawHorseData } from "@/lib/on-chain-mapping";
 
 type FeedEvent = {
   id: string;
@@ -11,6 +13,7 @@ type FeedEvent = {
   label: string;
   detail: string;
   timestamp: number;
+  tokenId?: number;
 };
 
 const POLL_INTERVAL_MS = 15_000;
@@ -103,12 +106,14 @@ export default function LiveFeed() {
           ]);
 
           for (const log of bredLogs) {
+            const offspringId = Number(log.args.offspringId ?? 0);
             newEvents.push({
               id: `bred-${log.transactionHash}-${log.logIndex}`,
               type: "breeding",
               label: `Offspring minted`,
-              detail: `Sire #${log.args.stallionId} × Mare #${log.args.mareId} → #${log.args.offspringId}`,
+              detail: `Sire #${log.args.stallionId} × Mare #${log.args.mareId} → #${offspringId}`,
               timestamp: Date.now(),
+              tokenId: offspringId,
             });
           }
           for (const log of brLogs) {
@@ -134,12 +139,14 @@ export default function LiveFeed() {
             const from = String(log.args.from ?? "");
             const to = String(log.args.to ?? "");
             const isMint = from === "0x0000000000000000000000000000000000000000";
+            const tokenId = Number(log.args.tokenId ?? 0);
             newEvents.push({
               id: `transfer-${log.transactionHash}-${log.logIndex}`,
               type: "transfer",
-              label: isMint ? `Horse #${log.args.tokenId} minted` : `Horse #${log.args.tokenId} transferred`,
+              label: isMint ? `Horse #${tokenId} minted` : `Horse #${tokenId} transferred`,
               detail: isMint ? `To ${to.slice(0, 8)}…` : `${from.slice(0, 8)}… → ${to.slice(0, 8)}…`,
               timestamp: Date.now(),
+              tokenId,
             });
           }
         }
@@ -161,6 +168,27 @@ export default function LiveFeed() {
   const oracleEvents = events.filter((e) => e.type === "oracle");
   const breedingEvents = events.filter((e) => e.type === "breeding");
   const transferEvents = events.filter((e) => e.type === "transfer");
+
+  const transferTokenIds = [...new Set(
+    transferEvents.map((e) => e.tokenId).filter((id): id is number => id != null)
+  )];
+  const horseDataCalls = transferTokenIds.map((tokenId) => ({
+    address: addresses.horseINFT,
+    abi: abis.HorseINFT,
+    functionName: "getHorseData" as const,
+    args: [BigInt(tokenId)] as [bigint],
+  }));
+  const { data: horseDataResults } = useReadContracts({
+    contracts: horseDataCalls as any,
+  });
+  const horseNames: Record<number, string> = {};
+  horseDataResults?.forEach((res, i) => {
+    const tokenId = transferTokenIds[i];
+    if (tokenId != null && res?.status === "success") {
+      const raw = parseRawHorseData(res.result);
+      horseNames[tokenId] = raw?.name?.trim() || `Horse #${tokenId}`;
+    }
+  });
 
   return (
     <div className="p-5 space-y-8 font-sans text-brand-ivory">
@@ -196,12 +224,24 @@ export default function LiveFeed() {
           <p className="text-xs text-muted-foreground py-3">No breeding activity on chain yet.</p>
         ) : (
           <div className="space-y-2">
-            {breedingEvents.map((e) => (
-              <div key={e.id} className="flex items-center justify-between py-2 px-3 rounded bg-white/[0.02] border border-white/5 text-xs">
-                <span className="text-brand-ivory font-medium">{e.label}</span>
-                <span className="text-muted-foreground">{e.detail}</span>
-              </div>
-            ))}
+            {breedingEvents.map((e) => {
+              const content = (
+                <>
+                  <span className="text-brand-ivory font-medium">{e.label}</span>
+                  <span className="text-muted-foreground">{e.detail}</span>
+                </>
+              );
+              const baseClass = "flex items-center justify-between py-2 px-3 rounded bg-white/[0.02] border border-white/5 text-xs";
+              return e.tokenId != null ? (
+                <Link key={e.id} href={`/horse/${e.tokenId}`} className={`${baseClass} hover:bg-white/[0.04] hover:border-prestige-gold/20 transition-colors`}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={e.id} className={baseClass}>
+                  {content}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -214,12 +254,30 @@ export default function LiveFeed() {
           <p className="text-xs text-muted-foreground py-3">No transfer events on chain yet.</p>
         ) : (
           <div className="space-y-2">
-            {transferEvents.map((e) => (
-              <div key={e.id} className="flex items-center justify-between py-2 px-3 rounded bg-white/[0.02] border border-white/5 text-xs">
-                <span className="text-brand-ivory font-medium">{e.label}</span>
-                <span className="text-muted-foreground">{e.detail}</span>
-              </div>
-            ))}
+            {transferEvents.map((e) => {
+              const displayName =
+                e.tokenId != null
+                  ? (horseNames[e.tokenId] ?? `Horse #${e.tokenId}`)
+                  : e.label.split(" ")[0];
+              const suffix = e.label.includes("minted") ? "minted" : "transferred";
+              const transferLabel = `${displayName} ${suffix}`;
+              const content = (
+                <>
+                  <span className="text-brand-ivory font-medium">{transferLabel}</span>
+                  <span className="text-muted-foreground">{e.detail}</span>
+                </>
+              );
+              const baseClass = "flex items-center justify-between py-2 px-3 rounded bg-white/[0.02] border border-white/5 text-xs";
+              return e.tokenId != null ? (
+                <Link key={e.id} href={`/horse/${e.tokenId}`} className={`${baseClass} hover:bg-white/[0.04] hover:border-prestige-gold/20 transition-colors`}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={e.id} className={baseClass}>
+                  {content}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

@@ -109,9 +109,11 @@ async function main() {
     args: [owner, "", h2.metadataHash, h2],
   });
   console.log("Minted horses 0, 1, 2. Tx:", tx0, tx1, tx2);
+  const isLocal = process.env.LOCAL_TESTING === "true" || process.env.RPC_URL?.includes("127.0.0.1");
+  const pollMs = isLocal ? 100 : 4000;
   async function waitReceipt(hash: `0x${string}`, label: string) {
-    for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 4000));
+    for (let i = 0; i < (isLocal ? 50 : 30); i++) {
+      await new Promise((r) => setTimeout(r, pollMs));
       try {
         const r = await publicClient.getTransactionReceipt({ hash });
         if (r) { console.log(`${label} confirmed (block ${r.blockNumber})`); return r; }

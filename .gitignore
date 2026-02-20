@@ -29,6 +29,9 @@ server/dist/
 # Uploads (server temp)
 server/uploads/
 
+# Local mock 0G storage (testing only)
+server/mock-og-storage/
+
 # Logs and OS
 *.log
 .DS_Store

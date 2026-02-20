@@ -6,6 +6,7 @@ import { addresses, abis } from "@/lib/contracts";
 import { formatEther } from "viem";
 import { useState } from "react";
 import Link from "next/link";
+import { parseRawHorseData } from "@/lib/on-chain-mapping";
 
 export default function VaultPage() {
   const params = useParams();
@@ -19,6 +20,18 @@ export default function VaultPage() {
     functionName: "vaultForHorse",
     args: [BigInt(id)],
   });
+
+  const { data: horseData } = useReadContract({
+    address: addresses.horseINFT,
+    abi: abis.HorseINFT,
+    functionName: "getHorseData",
+    args: [BigInt(id)],
+  });
+
+  const horseName =
+    horseData != null
+      ? (parseRawHorseData(horseData)?.name?.trim() || `Horse #${id}`)
+      : `Horse #${id}`;
 
   const vault =
     vaultAddr && vaultAddr !== "0x0000000000000000000000000000000000000000"
@@ -85,7 +98,7 @@ export default function VaultPage() {
   if (!vault)
     return (
       <p className="text-sm text-muted-foreground">
-        No vault for horse #{id}. Create one from the horse page.
+        No vault for {horseName}. Create one from the horse page.
       </p>
     );
 
@@ -98,7 +111,7 @@ export default function VaultPage() {
     <div className="space-y-6 max-w-3xl">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-wide text-foreground">
-          Vault — Horse #{id}
+          Vault — {horseName}
         </h1>
         <p className="text-sm text-muted-foreground">
           Fractional ownership vault backed by this horse&apos;s ADI flows.

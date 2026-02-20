@@ -13,7 +13,8 @@ import type {
   TopPerformer,
   RevenueBreakdownItem,
 } from "@/data/mockPortfolio";
-import { MAX_HORSE_ID_TO_FETCH } from "@/lib/on-chain-horses";
+import { MAX_HORSE_ID_TO_FETCH, isOnChainHorse } from "@/lib/on-chain-horses";
+import { parseRawHorseData } from "@/lib/on-chain-mapping";
 
 const vaultAbi = parseAbi([
   "function claimableFor(address) view returns (uint256)",
@@ -33,23 +34,46 @@ export default function PortfolioPage() {
     args: address ? [address] : undefined,
   });
 
-  const horseCalls = address
-    ? Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => ({
-        address: addresses.horseINFT,
-        abi: abis.HorseINFT,
-        functionName: "ownerOf" as const,
-        args: [BigInt(i)] as [bigint],
-      }))
-    : [];
-  const { data: horseOwnership } = useReadContracts({
-    contracts: horseCalls as any,
+  // First find which horses exist (getHorseData doesn't revert for non-existent tokens)
+  const horseDataCalls = Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => ({
+    address: addresses.horseINFT,
+    abi: abis.HorseINFT,
+    functionName: "getHorseData" as const,
+    args: [BigInt(i)] as [bigint],
+  }));
+  const { data: allHorseData, refetch: refetchHorses } = useReadContracts({
+    contracts: horseDataCalls as any,
+  });
+
+  const existingHorseIds =
+    allHorseData
+      ?.map((c, i) =>
+        c.status === "success" && c.result && isOnChainHorse(c.result) ? i : -1,
+      )
+      .filter((i) => i >= 0) ?? [];
+
+  // Only call ownerOf for horses that exist (avoids reverts)
+  const ownerOfCalls =
+    address && existingHorseIds.length > 0
+      ? existingHorseIds.map((id) => ({
+          address: addresses.horseINFT,
+          abi: abis.HorseINFT,
+          functionName: "ownerOf" as const,
+          args: [BigInt(id)] as [bigint],
+        }))
+      : [];
+  const { data: horseOwnership, refetch: refetchOwnership } = useReadContracts({
+    contracts: ownerOfCalls as any,
   });
 
   const myHorses =
     horseOwnership
-      ?.map((c, i) =>
-        c.status === "success" && c.result === address ? i : -1,
-      )
+      ?.map((c, i) => {
+        if (c.status !== "success" || !c.result || !address) return -1;
+        const owner = String(c.result).toLowerCase();
+        const me = String(address).toLowerCase();
+        return owner === me ? existingHorseIds[i] : -1;
+      })
       .filter((i) => i >= 0) ?? [];
 
   const vaultForHorseCalls =
@@ -77,6 +101,14 @@ export default function PortfolioPage() {
         return { horseId: myHorses[i], address: addr as `0x${string}` };
       })
       .filter(Boolean) as { horseId: number; address: `0x${string}` }[]) ?? [];
+
+  const horseNames: Record<number, string> = {};
+  allHorseData?.forEach((res, i) => {
+    if (res?.status === "success" && res.result) {
+      const raw = parseRawHorseData(res.result);
+      horseNames[i] = raw?.name?.trim() || `Horse #${i}`;
+    }
+  });
 
   const claimableCalls =
     address && vaults.length > 0
@@ -122,7 +154,7 @@ export default function PortfolioPage() {
       : [];
 
   const holdings: PortfolioHolding[] = revenueRows.map((r) => ({
-    asset: `Horse #${r.horseId}`,
+    asset: horseNames[r.horseId] ?? `Horse #${r.horseId}`,
     horseId: r.horseId,
     // keep on-chain quantities as bigint and format at render time
     shares: r.balance,
@@ -156,7 +188,7 @@ export default function PortfolioPage() {
       : null;
 
   const revenueBreakdown: RevenueBreakdownItem[] = revenueRows.map((r) => ({
-    asset: `Horse #${r.horseId}`,
+    asset: horseNames[r.horseId] ?? `Horse #${r.horseId}`,
     horseId: r.horseId,
     claimable: r.claimable,
   }));
@@ -169,13 +201,14 @@ export default function PortfolioPage() {
   const handleClaim = (horseId: number) => {
     const vault = vaults.find((v) => v.horseId === horseId);
     if (!vault) return;
-    setClaimStatus(`Claiming revenue for Horse #${horseId}…`);
+    const displayName = horseNames[horseId] ?? `Horse #${horseId}`;
+    setClaimStatus(`Claiming revenue for ${displayName}…`);
     writeContract({
       address: vault.address,
       abi: vaultAbi,
       functionName: "claim",
     }, {
-      onSuccess: () => setClaimStatus(`Claim submitted for Horse #${horseId}!`),
+      onSuccess: () => setClaimStatus(`Claim submitted for ${displayName}!`),
       onError: (err) => setClaimStatus(`Claim error: ${err.message.slice(0, 80)}`),
     });
   };
@@ -263,6 +296,51 @@ export default function PortfolioPage() {
                   </span>
                 )}
               </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[10px] font-sans tracking-[0.2em] text-muted-foreground uppercase">
+                MY HORSES
+              </h2>
+              <button
+                type="button"
+                onClick={() => { refetchHorses(); refetchOwnership(); }}
+                className="text-[10px] text-prestige-gold hover:text-prestige-gold/80 transition-colors uppercase tracking-wider"
+              >
+                Refresh
+              </button>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+              {myHorses.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  No horses owned. Mint via{" "}
+                  <Link href="/breed" className="text-prestige-gold hover:underline">
+                    Breeding Lab
+                  </Link>{" "}
+                  or buy from{" "}
+                  <Link href="/marketplace" className="text-prestige-gold hover:underline">
+                    Market
+                  </Link>
+                  . Just minted? Click <strong>Refresh</strong> above, or try{" "}
+                  <Link href="/horse/7" className="text-prestige-gold hover:underline">/horse/7</Link>{" "}
+                  directly.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {myHorses.map((id) => (
+                    <Link
+                      key={id}
+                      href={`/horse/${id}`}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 hover:border-prestige-gold/30 text-sm font-medium text-foreground transition-colors"
+                    >
+                      {horseNames[id] ?? `Horse #${id}`}
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 

@@ -9,7 +9,7 @@ import {
   useReadContract,
 } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   scoreStallions,
   type HorseTraits,
@@ -114,13 +114,25 @@ function toHorseTraits(
   }));
 }
 
+function getInitialMareId(
+  mareParam: string | null,
+  stallionParam: string | null
+): string {
+  if (mareParam) return mareParam;
+  if (stallionParam) return "";
+  return "1";
+}
+
 export default function BreedPage() {
   const searchParams = useSearchParams();
+  const mareParam = searchParams.get("mare");
   const stallionParam = searchParams.get("stallion");
   const advisorActive = searchParams.get("advisor") === "1";
   const chainId = useChainId();
   const { address } = useAccount();
-  const [mareId, setMareId] = useState<string>(stallionParam ? "" : "1");
+  const [mareId, setMareId] = useState<string>(() =>
+    getInitialMareId(mareParam, stallionParam)
+  );
   const [picks, setPicks] = useState<Recommendation[] | null>(null);
   const [selectedStallionId, setSelectedStallionId] = useState<number | null>(null);
   const [directBreedName, setDirectBreedName] = useState("");
@@ -136,6 +148,29 @@ export default function BreedPage() {
   const stallions = horses.filter(
     (h) => h.tokenId !== Number(mareId) && (h.studFeeADI ?? 0n) > 0n
   );
+
+  // Sync mareId when URL params change (e.g. navigation from horse card)
+  useEffect(() => {
+    const next = getInitialMareId(mareParam, stallionParam);
+    if (next !== mareId) setMareId(next);
+  }, [mareParam, stallionParam]);
+
+  // Auto-fetch picks when mare is pre-selected from URL
+  useEffect(() => {
+    if (!mare || stallions.length === 0 || picks !== null) return;
+    const maxFee = 1000n * BigInt(1e18);
+    setPicks(scoreStallions(mare, stallions, maxFee));
+    setTimelineStep("sign_eip712");
+  }, [mare, stallions, picks]);
+
+  // Pre-select stallion when coming from stallion page and it appears in picks
+  useEffect(() => {
+    if (!stallionParam || !picks || picks.length === 0) return;
+    const sid = Number(stallionParam);
+    if (Number.isNaN(sid)) return;
+    const inPicks = picks.some((p) => p.stallionTokenId === sid);
+    if (inPicks) setSelectedStallionId(sid);
+  }, [stallionParam, picks]);
 
   const mares: MareItem[] = useMemo(() => {
     const sorted = [...horses].sort((a, b) => b.pedigreeScore - a.pedigreeScore);
@@ -257,7 +292,8 @@ export default function BreedPage() {
           setTimelineStep("offspring_minted");
           const url = getTxExplorerUrl(chainId, hash);
           toast.success("Breeding plan executed", {
-            action: { label: "View on Explorer", onClick: () => window.open(url, "_blank") },
+            description: "Find your new horse in Portfolio → My Horses",
+            action: { label: "View Portfolio", onClick: () => window.location.href = "/portfolio" },
           });
         },
         onError: () => toast.error("Failed to execute breeding plan"),
@@ -289,7 +325,8 @@ export default function BreedPage() {
           setTimelineStep("offspring_minted");
           const url = getTxExplorerUrl(chainId, hash);
           toast.success("Offspring minted", {
-            action: { label: "View on Explorer", onClick: () => window.open(url, "_blank") },
+            description: "Find your new horse in Portfolio → My Horses",
+            action: { label: "View Portfolio", onClick: () => window.location.href = "/portfolio" },
           });
         },
         onError: () => toast.error("Failed to breed"),

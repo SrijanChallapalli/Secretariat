@@ -71,6 +71,17 @@ function sireOrDamLabel(parentId: bigint): string {
   return parentId > 0n ? `Horse #${parentId}` : "Founder";
 }
 
+/** Demo: inject fake changePct for heatmap when no valuation feed exists. */
+function demoChangePct(tokenId: number, pedigree: number): number {
+  const demo =
+    process.env.NEXT_PUBLIC_DEMO_HEATMAP === "true" ||
+    process.env.NEXT_PUBLIC_CHAIN_ID === "31337";
+  if (!demo) return 0;
+  // Deterministic spread: -12% to +12% based on tokenId + pedigree
+  const seed = (tokenId * 7 + pedigree * 11) % 25;
+  return seed - 12;
+}
+
 export function mapToHorseHeatmapItem(
   tokenId: number,
   raw: RawHorseData,
@@ -79,13 +90,14 @@ export function mapToHorseHeatmapItem(
   const valuation = Number(formatEther(raw.valuationADI));
   const pedigree = raw.pedigreeScore / 100;
   const color = colorForId(tokenId);
+  const changePct = demoChangePct(tokenId, pedigree);
   return {
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
     bloodline1: bloodlineLabel(raw.sireId),
     bloodline2: bloodlineLabel(raw.damId),
     valuation,
-    changePct: 0,
+    changePct,
     risk: riskFromPedigree(pedigree),
     color,
   };
