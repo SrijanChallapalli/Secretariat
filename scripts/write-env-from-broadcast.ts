@@ -8,6 +8,7 @@ import path from "path";
 
 const CONTRACT_KEYS = [
   "NEXT_PUBLIC_ADI_TOKEN",           // MockADI
+  "NEXT_PUBLIC_KYC_REGISTRY",       // KYCRegistry
   "NEXT_PUBLIC_HORSE_INFT",          // HorseINFT (skip MockINFTOracle - not needed in app)
   "NEXT_PUBLIC_BREEDING_MARKETPLACE",
   "NEXT_PUBLIC_HORSE_ORACLE",
@@ -16,7 +17,7 @@ const CONTRACT_KEYS = [
   "NEXT_PUBLIC_AGENT_EXECUTOR",
 ];
 // Broadcast order: MockADI(0), MockINFTOracle(1), KYCRegistry(2), HorseINFT(3), BreedingMarketplace(4), CALL(5), HorseOracle(6), CALL(7), VaultFactory(8), AgentINFT(9), AgentExecutor(10)
-const TX_INDEX_MAP = [0, 3, 4, 6, 8, 9, 10]; // skip MockINFTOracle, KYCRegistry, CALLs
+const TX_INDEX_MAP = [0, 2, 3, 4, 6, 8, 9, 10]; // skip MockINFTOracle, CALLs
 
 const chainId = process.argv[2] ?? "16602";
 const repoRoot = path.resolve(process.cwd());

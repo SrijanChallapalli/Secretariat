@@ -16,7 +16,7 @@ type FeedEvent = {
   tokenId?: number;
 };
 
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 5_000;
 const BLOCKS_TO_SCAN = 500n;
 
 const raceResultEvent = parseAbiItem(
@@ -162,7 +162,13 @@ export default function LiveFeed() {
 
     poll();
     const interval = setInterval(poll, POLL_INTERVAL_MS);
-    return () => { active = false; clearInterval(interval); };
+    const onMinted = () => { poll(); };
+    window.addEventListener("secretariat-horse-minted", onMinted);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener("secretariat-horse-minted", onMinted);
+    };
   }, [client]);
 
   const oracleEvents = events.filter((e) => e.type === "oracle");

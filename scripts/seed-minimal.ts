@@ -13,6 +13,7 @@ const PK = process.env.DEPLOYER_PRIVATE_KEY!;
 const adiAddr = process.env.ADI_TOKEN ?? process.env.NEXT_PUBLIC_ADI_TOKEN!;
 const horseAddr = process.env.HORSE_INFT ?? process.env.NEXT_PUBLIC_HORSE_INFT!;
 const marketAddr = process.env.BREEDING_MARKETPLACE ?? process.env.NEXT_PUBLIC_BREEDING_MARKETPLACE!;
+const kycAddr = process.env.KYC_REGISTRY ?? process.env.NEXT_PUBLIC_KYC_REGISTRY;
 
 const chain = {
   id: Number(process.env.CHAIN_ID_0G ?? 16602),
@@ -32,6 +33,7 @@ const abi = {
   BreedingMarketplace: parseAbi([
     "function list(uint256 stallionId, uint256 studFeeADI, uint256 maxUses, bool useAllowlist) external",
   ]),
+  KYCRegistry: parseAbi(["function verify(address account) external"]),
 };
 
 function encodeHorse(opts: {
@@ -131,6 +133,20 @@ async function main() {
   await wait(adiTx);
   await wait(tx0);
   await wait(tx1);
+
+  // 3b. KYC verify owner (required for purchaseBreedingRight)
+  if (kycAddr) {
+    const kycTx = await (wallet as any).writeContract({
+      address: kycAddr as `0x${string}`,
+      abi: abi.KYCRegistry,
+      functionName: "verify",
+      args: [owner],
+    });
+    console.log("Tx3b KYC verify owner:", kycTx);
+    await wait(kycTx);
+  } else {
+    console.warn("KYC_REGISTRY not set; breeding may fail with 'KYC required'");
+  }
 
   // 4. List stallion 0
   const listTx = await (wallet as any).writeContract({

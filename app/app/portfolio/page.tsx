@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAccount, useChainId, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { parseAbi } from "viem";
 import { addresses, abis } from "@/lib/contracts";
 import Link from "next/link";
@@ -22,9 +23,35 @@ const vaultAbi = parseAbi([
   "function claim() external",
 ]);
 
+const MINTED_HORSE_KEY = "secretariat_minted_horse";
+const MINT_CORRELATION_KEY = "secretariat_mint_correlation_id";
+const DEBUG_MINT_TRACE = typeof window !== "undefined" && process.env.NEXT_PUBLIC_DEBUG_MINT_TRACE === "true";
+
 export default function PortfolioPage() {
+  const searchParams = useSearchParams();
   const { address } = useAccount();
+  const chainId = useChainId();
   const [claimStatus, setClaimStatus] = useState<string | null>(null);
+  const [mintedId, setMintedId] = useState<number | null>(null);
+  const [syncingRetries, setSyncingRetries] = useState(0);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("minted");
+    if (fromUrl) {
+      const n = parseInt(fromUrl, 10);
+      if (!Number.isNaN(n)) {
+        setMintedId(n);
+        return;
+      }
+    }
+    if (typeof window !== "undefined") {
+      const fromStorage = sessionStorage.getItem(MINTED_HORSE_KEY);
+      if (fromStorage) {
+        const n = parseInt(fromStorage, 10);
+        if (!Number.isNaN(n)) setMintedId(n);
+      }
+    }
+  }, [searchParams]);
   const { writeContract } = useWriteContract();
 
   const { data: balances, isLoading: balLoading } = useReadContract({
@@ -72,13 +99,85 @@ export default function PortfolioPage() {
         if (c.status !== "success" || !c.result || !address) return -1;
         const owner = String(c.result).toLowerCase();
         const me = String(address).toLowerCase();
+        if (DEBUG_MINT_TRACE && existingHorseIds[i] !== undefined) {
+          console.debug("[MintTrace] owner match", { owner, me, match: owner === me, tokenId: existingHorseIds[i] });
+        }
         return owner === me ? existingHorseIds[i] : -1;
       })
       .filter((i) => i >= 0) ?? [];
 
+  const needsFallbackRead =
+    mintedId != null &&
+    address &&
+    (mintedId >= MAX_HORSE_ID_TO_FETCH || !existingHorseIds.includes(mintedId));
+  const fallbackCalls = needsFallbackRead
+    ? [
+        {
+          address: addresses.horseINFT,
+          abi: abis.HorseINFT,
+          functionName: "getHorseData" as const,
+          args: [BigInt(mintedId!)] as [bigint],
+        },
+        {
+          address: addresses.horseINFT,
+          abi: abis.HorseINFT,
+          functionName: "ownerOf" as const,
+          args: [BigInt(mintedId!)] as [bigint],
+        },
+      ]
+    : [];
+  const { data: fallbackData } = useReadContracts({
+    contracts: fallbackCalls as any,
+  });
+
+  const fallbackOwnedMintedId =
+    needsFallbackRead &&
+    fallbackData &&
+    fallbackData.length >= 2 &&
+    fallbackData[0]?.status === "success" &&
+    fallbackData[0]?.result &&
+    isOnChainHorse(fallbackData[0].result) &&
+    fallbackData[1]?.status === "success" &&
+    fallbackData[1]?.result &&
+    String(fallbackData[1].result).toLowerCase() === String(address).toLowerCase()
+      ? mintedId
+      : null;
+
+  const myHorsesWithFallback =
+    fallbackOwnedMintedId != null && !myHorses.includes(fallbackOwnedMintedId)
+      ? [...myHorses, fallbackOwnedMintedId]
+      : myHorses;
+
+  const isMintedHorseSynced = mintedId != null && myHorsesWithFallback.includes(mintedId);
+
+  useEffect(() => {
+    if (DEBUG_MINT_TRACE && address && chainId) {
+      const correlationId = typeof window !== "undefined" ? sessionStorage.getItem(MINT_CORRELATION_KEY) : null;
+      console.debug("[MintTrace] portfolio fetch", { correlationId, address, chainId, existingHorseIds, myHorses: myHorsesWithFallback });
+    }
+  }, [address, chainId, existingHorseIds, myHorsesWithFallback]);
+
+  useEffect(() => {
+    if (mintedId == null || isMintedHorseSynced || syncingRetries >= 5) {
+      if (isMintedHorseSynced && typeof window !== "undefined") {
+        sessionStorage.removeItem(MINTED_HORSE_KEY);
+        sessionStorage.removeItem(MINT_CORRELATION_KEY);
+        setMintedId(null);
+        setSyncingRetries(0);
+      }
+      return;
+    }
+    const t = setTimeout(async () => {
+      await refetchHorses();
+      refetchOwnership();
+      setSyncingRetries((r) => r + 1);
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [mintedId, isMintedHorseSynced, syncingRetries, refetchHorses, refetchOwnership]);
+
   const vaultForHorseCalls =
-    address && myHorses.length > 0
-      ? myHorses.map((id) => ({
+    address && myHorsesWithFallback.length > 0
+      ? myHorsesWithFallback.map((id) => ({
           address: addresses.syndicateVaultFactory,
           abi: abis.HorseSyndicateVaultFactory,
           functionName: "vaultForHorse" as const,
@@ -98,7 +197,7 @@ export default function PortfolioPage() {
         if (!addr || addr === "0x0000000000000000000000000000000000000000") {
           return null;
         }
-        return { horseId: myHorses[i], address: addr as `0x${string}` };
+        return { horseId: myHorsesWithFallback[i], address: addr as `0x${string}` };
       })
       .filter(Boolean) as { horseId: number; address: `0x${string}` }[]) ?? [];
 
@@ -109,6 +208,10 @@ export default function PortfolioPage() {
       horseNames[i] = raw?.name?.trim() || `Horse #${i}`;
     }
   });
+  if (fallbackOwnedMintedId != null && fallbackData?.[0]?.status === "success" && fallbackData[0].result) {
+    const raw = parseRawHorseData(fallbackData[0].result);
+    horseNames[fallbackOwnedMintedId] = raw?.name?.trim() || `Horse #${fallbackOwnedMintedId}`;
+  }
 
   const claimableCalls =
     address && vaults.length > 0
@@ -231,6 +334,12 @@ export default function PortfolioPage() {
         </div>
       )}
 
+      {mintedId != null && !isMintedHorseSynced && (
+        <div className="rounded-lg border border-prestige-gold/40 bg-prestige-gold/5 p-3 text-sm text-prestige-gold">
+          Minted, syncing… Horse #{mintedId} will appear shortly. {syncingRetries < 5 ? `Refreshing (${syncingRetries}/5)…` : "Click Refresh above if it doesn&apos;t appear."}
+        </div>
+      )}
+
       {!address ? (
         <p className="text-sm text-muted-foreground">
           Connect your wallet to see your portfolio.
@@ -306,14 +415,14 @@ export default function PortfolioPage() {
               </h2>
               <button
                 type="button"
-                onClick={() => { refetchHorses(); refetchOwnership(); }}
+                onClick={async () => { await refetchHorses(); refetchOwnership(); }}
                 className="text-[10px] text-prestige-gold hover:text-prestige-gold/80 transition-colors uppercase tracking-wider"
               >
                 Refresh
               </button>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
-              {myHorses.length === 0 ? (
+              {myHorsesWithFallback.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">
                   No horses owned. Mint via{" "}
                   <Link href="/breed" className="text-prestige-gold hover:underline">
@@ -329,7 +438,7 @@ export default function PortfolioPage() {
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {myHorses.map((id) => (
+                  {myHorsesWithFallback.map((id) => (
                     <Link
                       key={id}
                       href={`/horse/${id}`}

@@ -1,6 +1,6 @@
 import { addresses, abis } from "./contracts";
 import { createPublicClient, http, type PublicClient } from "viem";
-import { ogGalileo } from "./chains";
+import { anvilLocal, ogGalileo } from "./chains";
 
 export interface PedigreeNode {
   tokenId: number;
@@ -74,8 +74,10 @@ export async function buildPedigreeTree(
     return null;
   }
 
+  const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 16602);
+  const chain = chainId === 31337 ? anvilLocal : ogGalileo;
   const client = createPublicClient({
-    chain: ogGalileo,
+    chain,
     transport: http(),
   });
 

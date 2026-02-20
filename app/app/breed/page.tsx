@@ -7,7 +7,9 @@ import {
   useWriteContract,
   useSignTypedData,
   useReadContract,
+  usePublicClient,
 } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { addresses, abis } from "@/lib/contracts";
 import { useState, useMemo, useEffect } from "react";
 import {
@@ -22,7 +24,11 @@ import {
   keccak256,
   toHex,
   formatEther,
+  decodeEventLog,
+  parseAbiItem,
 } from "viem";
+
+const MAX_UINT256 = 2n ** 256n - 1n;
 import { PedigreeTree } from "@/components/PedigreeTree";
 import { StudBookHeader } from "@/components/breeding/StudBookHeader";
 import {
@@ -59,6 +65,52 @@ const BADGES: ("RECOMMENDED" | "STRONG" | "VIABLE")[] = [
   "STRONG",
   "VIABLE",
 ];
+
+const BRED_EVENT = parseAbiItem(
+  "event Bred(uint256 indexed stallionId, uint256 indexed mareId, uint256 indexed offspringId)"
+);
+
+const MINTED_HORSE_KEY = "secretariat_minted_horse";
+const MINT_CORRELATION_KEY = "secretariat_mint_correlation_id";
+const DEBUG_MINT_TRACE = typeof window !== "undefined" && process.env.NEXT_PUBLIC_DEBUG_MINT_TRACE === "true";
+
+async function parseOffspringIdFromReceipt(
+  client: { getTransactionReceipt: (opts: { hash: `0x${string}` }) => Promise<{ logs: { address?: `0x${string}`; topics: readonly `0x${string}`[]; data: `0x${string}` }[] } | null> },
+  hash: `0x${string}`,
+  breedingMarketplaceAddress: `0x${string}`,
+  maxAttempts = 20
+): Promise<number | null> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const receipt = await client.getTransactionReceipt({ hash });
+    if (receipt) {
+      if (DEBUG_MINT_TRACE) {
+        console.debug("[MintTrace] receipt", { txHash: hash, logCount: receipt.logs.length });
+      }
+      for (const log of receipt.logs) {
+        if (log.address?.toLowerCase() !== breedingMarketplaceAddress.toLowerCase()) continue;
+        try {
+          const decoded = decodeEventLog({
+            abi: [BRED_EVENT],
+            data: log.data,
+            topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
+          });
+          if (decoded.eventName === "Bred") {
+            const offspringId = Number(decoded.args.offspringId);
+            if (DEBUG_MINT_TRACE) {
+              console.debug("[MintTrace] Bred event", { offspringId, stallionId: decoded.args.stallionId, mareId: decoded.args.mareId });
+            }
+            return offspringId;
+          }
+        } catch {
+          /* not Bred event */
+        }
+      }
+      return null;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return null;
+}
 
 function mapRecommendationToDisplay(
   rec: Recommendation,
@@ -127,7 +179,7 @@ export default function BreedPage() {
   const searchParams = useSearchParams();
   const mareParam = searchParams.get("mare");
   const stallionParam = searchParams.get("stallion");
-  const advisorActive = searchParams.get("advisor") === "1";
+  const advisorActive = searchParams.get("advisor") !== "0";
   const chainId = useChainId();
   const { address } = useAccount();
   const [mareId, setMareId] = useState<string>(() =>
@@ -198,10 +250,11 @@ export default function BreedPage() {
     setTimelineStep("sign_eip712");
   };
 
-  const { writeContract: purchaseRight } = useWriteContract();
+  const queryClient = useQueryClient();
+  const publicClient = usePublicClient();
+  const { writeContract: purchaseRight, writeContractAsync: purchaseRightAsync } = useWriteContract();
   const { signTypedDataAsync } = useSignTypedData();
-  const { writeContract: executePlan } = useWriteContract();
-  const { writeContract: breedDirect } = useWriteContract();
+  const { writeContractAsync: breedAsync } = useWriteContract();
 
   const { data: hasBreedingRight } = useReadContract({
     address: addresses.breedingMarketplace,
@@ -214,7 +267,61 @@ export default function BreedPage() {
     query: { enabled: selectedStallionId !== null && !!address },
   });
 
+  // ADI allowance for BreedingMarketplace (required for purchaseBreedingRight)
+  const { data: adiAllowance, refetch: refetchAllowance } = useReadContract({
+    address: addresses.adiToken,
+    abi: abis.MockADI,
+    functionName: "allowance",
+    args: address && addresses.breedingMarketplace !== "0x0000000000000000000000000000000000000000" ? [address, addresses.breedingMarketplace] : undefined,
+    query: { enabled: !!address },
+  });
+
+  // Stud fee for the stallion we're about to purchase (direct or advisor)
+  const activeStallionId = selectedStallionId ?? picks?.[0]?.stallionTokenId ?? null;
+  const studFeeADI = activeStallionId != null
+    ? (stallions.find((s) => s.tokenId === activeStallionId)?.studFeeADI ?? 0n)
+    : 0n;
+  const needsApproval = !!address && studFeeADI > 0n && adiAllowance !== undefined && adiAllowance < studFeeADI;
+
+  const { writeContract: approveADI } = useWriteContract();
+
+  // Skip approve_adi when allowance is already sufficient
+  useEffect(() => {
+    if (!needsApproval && timelineStep === "approve_adi" && (picks?.length ?? 0) > 0) {
+      setTimelineStep("sign_eip712");
+    }
+  }, [needsApproval, timelineStep, picks?.length]);
+
+  const handleApproveADI = () => {
+    approveADI(
+      {
+        address: addresses.adiToken,
+        abi: abis.MockADI,
+        functionName: "approve",
+        args: [addresses.breedingMarketplace, MAX_UINT256],
+      },
+      {
+        onSuccess: (hash) => {
+          setTimelineStep("sign_eip712");
+          refetchAllowance();
+          const url = getTxExplorerUrl(chainId, hash);
+          toast.success("ADI approved", {
+            action: { label: "View on Explorer", onClick: () => window.open(url, "_blank") },
+          });
+        },
+        onError: (err) => {
+          const msg = err?.message ?? "Unknown error";
+          toast.error(msg.includes("allowance") ? "Insufficient allowance or approval failed" : "Failed to approve ADI");
+        },
+      }
+    );
+  };
+
   const handlePurchaseRight = (stallionId: number) => {
+    if (needsApproval) {
+      toast.error("Approve ADI first, then purchase.");
+      return;
+    }
     const seed = keccak256(
       toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
     );
@@ -228,18 +335,32 @@ export default function BreedPage() {
       {
         onSuccess: (hash) => {
           setTimelineStep("breed");
+          queryClient.invalidateQueries();
           const url = getTxExplorerUrl(chainId, hash);
           toast.success("Breeding right purchased", {
             action: { label: "View on Explorer", onClick: () => window.open(url, "_blank") },
           });
         },
-        onError: () => toast.error("Failed to purchase breeding right"),
+        onError: (err) => {
+          const msg = String(err?.message ?? "");
+          toast.error(
+            msg.includes("KYC") ? "KYC required. Run seed script to verify your address." :
+            msg.includes("allowance") ? "Approve ADI first, then purchase." :
+            "Failed to purchase breeding right"
+          );
+        },
       }
     );
   };
 
   const handleExecute = async (stallionId: number, name: string) => {
-    if (!address || !mare) return;
+    if (!address || !mare || !publicClient) return;
+    if (needsApproval) {
+      toast.error("Approve ADI first, then execute.");
+      return;
+    }
+
+    // Step 1: EIP-712 signature (compliance record, kept for UX ceremony)
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
     const traitFloor = keccak256(
       encodeAbiParameters(parseAbiParameters("uint8[8]"), [
@@ -262,54 +383,97 @@ export default function BreedPage() {
       version: "1",
       chainId,
     } as const;
-    const sig = await signTypedDataAsync({
-      domain,
-      types: BREEDING_PLAN_TYPE,
-      primaryType: "BreedingPlan",
-      message: plan,
-    });
-    const salt = keccak256(
-      toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
-    );
-    const purchaseSeed = keccak256(
-      toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
-    );
-    executePlan(
-      {
-        address: addresses.agentExecutor,
-        abi: abis.AgentExecutor,
-        functionName: "execute",
+
+    try {
+      await signTypedDataAsync({
+        domain,
+        types: BREEDING_PLAN_TYPE,
+        primaryType: "BreedingPlan",
+        message: plan,
+      });
+      setTimelineStep("purchase_right");
+
+      // Step 2: Purchase breeding right if needed (user is msg.sender, not AgentExecutor)
+      const alreadyHasRight = hasBreedingRight === true;
+      if (!alreadyHasRight) {
+        const seed = keccak256(
+          toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
+        );
+        toast.info("Purchasing breeding right...");
+        const purchaseHash = await purchaseRightAsync({
+          address: addresses.breedingMarketplace,
+          abi: abis.BreedingMarketplace,
+          functionName: "purchaseBreedingRight",
+          args: [BigInt(stallionId), seed],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: purchaseHash });
+        queryClient.invalidateQueries();
+      }
+
+      // Step 3: Breed (user is msg.sender, so mare ownership + breeding right checks pass)
+      setTimelineStep("breed");
+      toast.info("Breeding offspring...");
+      const salt = keccak256(
+        toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
+      );
+      const breedHash = await breedAsync({
+        address: addresses.breedingMarketplace,
+        abi: abis.BreedingMarketplace,
+        functionName: "breed",
         args: [
-          plan,
+          BigInt(stallionId),
+          BigInt(mare.tokenId),
           name || "Offspring",
           salt,
-          purchaseSeed,
-          sig as `0x${string}`,
         ],
-      },
-      {
-        onSuccess: (hash) => {
-          setTimelineStep("offspring_minted");
-          const url = getTxExplorerUrl(chainId, hash);
-          toast.success("Breeding plan executed", {
-            description: "Find your new horse in Portfolio → My Horses",
-            action: { label: "View Portfolio", onClick: () => window.location.href = "/portfolio" },
-          });
-        },
-        onError: () => toast.error("Failed to execute breeding plan"),
+      });
+
+      // Step 4: Parse offspring and notify
+      setTimelineStep("offspring_minted");
+      const correlationId = DEBUG_MINT_TRACE ? crypto.randomUUID() : undefined;
+      if (correlationId) {
+        sessionStorage.setItem(MINT_CORRELATION_KEY, correlationId);
+        console.debug("[MintTrace] breed execute", { correlationId, wallet: address, chainId, stallionId, mareId: mare.tokenId, txHash: breedHash });
       }
-    );
+      const offspringId = await parseOffspringIdFromReceipt(publicClient, breedHash, addresses.breedingMarketplace, 30);
+      if (offspringId != null) {
+        sessionStorage.setItem(MINTED_HORSE_KEY, String(offspringId));
+      }
+      queryClient.invalidateQueries();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("secretariat-horse-minted", { detail: { offspringId } }));
+      }
+      toast.success("Offspring minted!", {
+        description: "Find your new horse in Portfolio → My Horses",
+        action: {
+          label: "View Portfolio",
+          onClick: () => { window.location.href = offspringId != null ? `/portfolio?minted=${offspringId}` : "/portfolio"; },
+        },
+      });
+    } catch (err: unknown) {
+      const msg = String((err as Error)?.message ?? "");
+      if (msg.includes("User rejected") || msg.includes("denied")) {
+        toast.error("Transaction cancelled.");
+      } else {
+        toast.error(
+          msg.includes("KYC") ? "KYC required. Run seed script to verify your address." :
+          msg.includes("allowance") ? "Approve ADI first, then execute." :
+          msg.includes("Not mare owner") ? "You must own the mare to breed." :
+          `Breeding failed: ${msg.slice(0, 120)}`
+        );
+      }
+    }
   };
 
-  const handleDirectBreed = () => {
-    if (!address || !mare || selectedStallionId === null) return;
+  const handleDirectBreed = async () => {
+    if (!address || !mare || selectedStallionId === null || !publicClient) return;
     if (!directBreedName || !validateHorseName(directBreedName).valid) return;
 
     const salt = keccak256(
       toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
     );
-    breedDirect(
-      {
+    try {
+      const hash = await breedAsync({
         address: addresses.breedingMarketplace,
         abi: abis.BreedingMarketplace,
         functionName: "breed",
@@ -319,19 +483,37 @@ export default function BreedPage() {
           directBreedName,
           salt,
         ],
-      },
-      {
-        onSuccess: (hash) => {
-          setTimelineStep("offspring_minted");
-          const url = getTxExplorerUrl(chainId, hash);
-          toast.success("Offspring minted", {
-            description: "Find your new horse in Portfolio → My Horses",
-            action: { label: "View Portfolio", onClick: () => window.location.href = "/portfolio" },
-          });
-        },
-        onError: () => toast.error("Failed to breed"),
+      });
+
+      setTimelineStep("offspring_minted");
+      const correlationId = DEBUG_MINT_TRACE ? crypto.randomUUID() : undefined;
+      if (correlationId) {
+        sessionStorage.setItem(MINT_CORRELATION_KEY, correlationId);
+        console.debug("[MintTrace] breed direct", { correlationId, wallet: address, chainId, stallionId: selectedStallionId, mareId: mare.tokenId, txHash: hash });
       }
-    );
+      const offspringId = await parseOffspringIdFromReceipt(publicClient, hash, addresses.breedingMarketplace, 30);
+      if (offspringId != null) {
+        sessionStorage.setItem(MINTED_HORSE_KEY, String(offspringId));
+      }
+      queryClient.invalidateQueries();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("secretariat-horse-minted", { detail: { offspringId } }));
+      }
+      toast.success("Offspring minted", {
+        description: "Find your new horse in Portfolio → My Horses",
+        action: {
+          label: "View Portfolio",
+          onClick: () => { window.location.href = offspringId != null ? `/portfolio?minted=${offspringId}` : "/portfolio"; },
+        },
+      });
+    } catch (err: unknown) {
+      const msg = String((err as Error)?.message ?? "");
+      if (msg.includes("User rejected") || msg.includes("denied")) {
+        toast.error("Transaction cancelled.");
+      } else {
+        toast.error(msg.includes("right") ? "Purchase breeding right first." : "Failed to breed");
+      }
+    }
   };
 
   const handleReviewAndApprove = (stallionId: number) => {
@@ -393,6 +575,22 @@ export default function BreedPage() {
             </div>
 
             <div className="space-y-4">
+              {needsApproval && (
+                <div className="rounded-md border border-prestige-gold/40 bg-prestige-gold/5 p-4 space-y-2">
+                  <p className="text-xs font-medium text-foreground">
+                    Approve ADI (required for stud fee)
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Allow the marketplace to spend {formatEther(BigInt(studFeeADI))} ADI for the breeding right.
+                  </p>
+                  <button
+                    onClick={handleApproveADI}
+                    className="px-4 py-2 rounded-md bg-prestige-gold text-prestige-gold-foreground text-xs font-medium hover:bg-prestige-gold/90 transition-colors"
+                  >
+                    Approve ADI
+                  </button>
+                </div>
+              )}
               <BreedingPicks
                 picks={breedingPicksDisplay}
                 onExecuteWithApproval={advisorActive ? handleExecute : undefined}

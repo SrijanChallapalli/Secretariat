@@ -14,6 +14,7 @@ const adiAddr = process.env.ADI_TOKEN ?? process.env.NEXT_PUBLIC_ADI_TOKEN!;
 const horseAddr = process.env.HORSE_INFT ?? process.env.NEXT_PUBLIC_HORSE_INFT!;
 const marketAddr = process.env.BREEDING_MARKETPLACE ?? process.env.NEXT_PUBLIC_BREEDING_MARKETPLACE!;
 const agentAddr = process.env.AGENT_INFT ?? process.env.NEXT_PUBLIC_AGENT_INFT!;
+const kycAddr = process.env.KYC_REGISTRY ?? process.env.NEXT_PUBLIC_KYC_REGISTRY;
 
 const chain = { id: Number(process.env.CHAIN_ID_0G ?? 16602), name: "0G", nativeCurrency: { decimals: 18, name: "ETH", symbol: "ETH" }, rpcUrls: { default: { http: [RPC] } } } as const;
 
@@ -29,6 +30,7 @@ const abi = {
   BreedingAdvisorINFT: parseAbi([
     "function mint(address to, (string name, string version, string specialization, string modelBundleRootHash) profile) external returns (uint256)",
   ]),
+  KYCRegistry: parseAbi(["function verify(address account) external"]),
 };
 
 function encodeHorseData(opts: {
@@ -124,6 +126,19 @@ async function main() {
   await waitReceipt(tx0, "Horse 0");
   await waitReceipt(tx1, "Horse 1");
   await waitReceipt(tx2, "Horse 2");
+
+  // KYC verify owner (required for purchaseBreedingRight)
+  if (kycAddr) {
+    const kycTx = await (wallet as any).writeContract({
+      address: kycAddr as `0x${string}`,
+      abi: abi.KYCRegistry,
+      functionName: "verify",
+      args: [owner],
+    });
+    await waitReceipt(kycTx, "KYC verify owner");
+  } else {
+    console.warn("KYC_REGISTRY not set; breeding may fail with 'KYC required'");
+  }
 
   // List stallions 0 and 2 for breeding
   await (wallet as any).writeContract({
