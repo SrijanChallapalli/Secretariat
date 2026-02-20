@@ -47,6 +47,9 @@ export interface FeatureVector {
   offspringCount?: number;
   offspringWins?: number;
 
+  // Genetic markers
+  xFactorCarrier?: boolean; // enlarged heart gene (X-chromosome inheritance)
+
   // Future ML features (nullable — filled when oracle/data available)
   dosageProfile?: [number, number, number, number, number]; // [B, I, C, S, P]
   dosageIndex?: number;
@@ -115,6 +118,54 @@ export interface TrainingEvent {
   valuationBefore: number;
   valuationAfter: number;
   eventData: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Biometric reading (from on-chain oracle)
+// ---------------------------------------------------------------------------
+
+export interface BiometricReading {
+  biometricType: number; // 0=stride, 1=heartRate, 2=gaitSymmetry, 3=respiration, 4=temperature
+  value: number;
+  baseline: number;
+  deviationBps: number;
+  timestamp: number;
+}
+
+export const BIOMETRIC_TYPES = {
+  STRIDE_LENGTH: 0,
+  HEART_RATE: 1,
+  GAIT_SYMMETRY: 2,
+  RESPIRATION: 3,
+  TEMPERATURE: 4,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Risk configuration (DeFAI Mixing Board parameters)
+// ---------------------------------------------------------------------------
+
+export interface RiskConfig {
+  minValuationADI: number;
+  maxDrawdownBps: number;
+  maxPositionSizeBps: number;
+  healthThreshold: number;
+  strideDeltaThresholdBps: number;
+  peakValuation: number;
+  stopLossEnabled: boolean;
+  autoRetireOnHealth: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Invoice (automated OpEx)
+// ---------------------------------------------------------------------------
+
+export interface InvoiceData {
+  id: number;
+  provider: string;
+  amount: number;
+  invoiceHash: string;
+  status: "pending" | "approved" | "rejected" | "paid";
+  submittedAt: number;
 }
 
 // ---------------------------------------------------------------------------

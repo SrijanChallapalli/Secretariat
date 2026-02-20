@@ -20,7 +20,7 @@ const chain = { id: Number(process.env.CHAIN_ID_0G ?? 16602), name: "0G", native
 const abi = {
   MockADI: parseAbi(["function mint(address to, uint256 amount) external", "function balanceOf(address) view returns (uint256)"]),
   HorseINFT: parseAbi([
-    "function mint(address to, string calldata encryptedURI, bytes32 metadataHash, (string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, string encryptedURI, bytes32 metadataHash) data) external returns (uint256)",
+    "function mint(address to, string calldata encryptedURI, bytes32 metadataHash, (string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash) data) external returns (uint256)",
     "function owner() view returns (address)",
   ]),
   BreedingMarketplace: parseAbi([
@@ -53,6 +53,7 @@ function encodeHorseData(opts: {
     breedingAvailable: opts.breedingAvailable ?? true,
     injured: false,
     retired: false,
+    xFactorCarrier: false,
     encryptedURI: "",
     metadataHash: `0x${"00".repeat(32)}` as `0x${string}`,
   };

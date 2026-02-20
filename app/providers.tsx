@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, http } from "wagmi";
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from "@rainbow-me/rainbowkit";
@@ -25,6 +26,11 @@ const config = getDefaultConfig({
 const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7524/ingest/696202e6-6f08-414a-95f0-39ceaf6652dd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ecf8bf'},body:JSON.stringify({sessionId:'ecf8bf',runId:'run1',hypothesisId:'H1',location:'providers.tsx:Providers',message:'WalletConnect projectId on mount',data:{rawEnvLength:env.NEXT_PUBLIC_WALLETCONNECT_ID.length,rawEnvValue:env.NEXT_PUBLIC_WALLETCONNECT_ID,resolvedProjectId:projectId,isFallback:projectId===VALID_FALLBACK},timestamp:Date.now()})}).catch(()=>{});
+  }, []);
+  // #endregion
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>

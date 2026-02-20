@@ -51,6 +51,7 @@ const EVENT_TYPE_ENUM: Record<string, number> = {
   RACE_RESULT: 0,
   INJURY: 1,
   NEWS: 2,
+  BIOMETRIC: 3,
 };
 
 // ---------------------------------------------------------------------------
@@ -65,8 +66,8 @@ export async function simulateEventRoute(req: Request, res: Response) {
       res.status(400).json({ error: "tokenId (number) required" });
       return;
     }
-    if (!type || !["RACE_RESULT", "INJURY", "NEWS"].includes(type)) {
-      res.status(400).json({ error: "type must be RACE_RESULT | INJURY | NEWS" });
+    if (!type || !["RACE_RESULT", "INJURY", "NEWS", "BIOMETRIC"].includes(type)) {
+      res.status(400).json({ error: "type must be RACE_RESULT | INJURY | NEWS | BIOMETRIC" });
       return;
     }
 
@@ -118,7 +119,7 @@ export async function simulateEventRoute(req: Request, res: Response) {
           notes: (p.notes as string) ?? undefined,
         },
       } satisfies InjuryEvent;
-    } else {
+    } else if (type === "NEWS") {
       const p = (params ?? {}) as Record<string, unknown>;
       event = {
         ...base,
@@ -129,6 +130,19 @@ export async function simulateEventRoute(req: Request, res: Response) {
           notes: (p.notes as string) ?? undefined,
         },
       } satisfies NewsEvent;
+    } else {
+      // BIOMETRIC
+      const p = (params ?? {}) as Record<string, unknown>;
+      event = {
+        ...base,
+        eventType: "BIOMETRIC" as any,
+        biometric: {
+          type: Number(p.biometricType ?? 0),
+          value: Number(p.value ?? 0),
+          baseline: Number(p.baseline ?? 0),
+          anomalyThresholdBps: Number(p.anomalyThresholdBps ?? 500),
+        },
+      } as any;
     }
 
     const { canonicalJson, eventHash } = canonicalizeEvent(event);

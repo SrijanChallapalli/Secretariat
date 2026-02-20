@@ -5,11 +5,18 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./HorseINFT.sol";
+import "./KYCRegistry.sol";
 
 /// @title BreedingMarketplace - List stallions, buy breeding rights, breed
 contract BreedingMarketplace is Ownable, ReentrancyGuard {
     IERC20 public adi;
     HorseINFT public horseNFT;
+    KYCRegistry public kycRegistry;
+
+    modifier onlyKYC() {
+        require(address(kycRegistry) == address(0) || kycRegistry.isVerified(msg.sender), "KYC required");
+        _;
+    }
 
     struct Listing {
         uint256 studFeeADI;
@@ -42,11 +49,16 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
     event BreedingParamsUpdated(uint256 sireWeight, uint256 damWeight, uint256 mutationRange, uint256 decayFactor);
     event BreedingRightDurationUpdated(uint256 duration);
 
-    constructor(address _adi, address _horseNFT) Ownable(msg.sender) {
+    constructor(address _adi, address _horseNFT, address _kycRegistry) Ownable(msg.sender) {
         require(_adi != address(0), "Zero ADI address");
         require(_horseNFT != address(0), "Zero HorseNFT address");
         adi = IERC20(_adi);
         horseNFT = HorseINFT(_horseNFT);
+        if (_kycRegistry != address(0)) kycRegistry = KYCRegistry(_kycRegistry);
+    }
+
+    function setKYCRegistry(address _kycRegistry) external onlyOwner {
+        kycRegistry = KYCRegistry(_kycRegistry);
     }
 
     function list(uint256 stallionId, uint256 studFeeADI, uint256 maxUses, bool useAllowlist_) external {
@@ -72,7 +84,7 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
         emit Unlisted(stallionId);
     }
 
-    function purchaseBreedingRight(uint256 stallionId, bytes32 seed) external nonReentrant {
+    function purchaseBreedingRight(uint256 stallionId, bytes32 seed) external nonReentrant onlyKYC {
         Listing storage list_ = listings[stallionId];
         require(list_.active, "Not listed");
         require(list_.usedCount < list_.maxUses, "Max uses");
@@ -130,6 +142,8 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
         }
 
         uint256 initialValuation = (sire.valuationADI + dam.valuationADI) / 2;
+        // X-Factor inherits via dam's X chromosome to all offspring
+        bool xFactor = dam.xFactorCarrier;
         HorseINFT.HorseData memory offspringData = HorseINFT.HorseData({
             name: offspringName,
             birthTimestamp: uint64(block.timestamp),
@@ -142,6 +156,7 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
             breedingAvailable: false,
             injured: false,
             retired: false,
+            xFactorCarrier: xFactor,
             encryptedURI: "",
             metadataHash: keccak256(abi.encodePacked(stallionId, mareId, seed, salt, block.chainid))
         });

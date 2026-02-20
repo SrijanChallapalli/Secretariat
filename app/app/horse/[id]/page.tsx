@@ -73,7 +73,7 @@ export default function HorseDetailPage() {
       address: addresses.syndicateVaultFactory,
       abi: abis.HorseSyndicateVaultFactory,
       functionName: "createVault",
-      args: [BigInt(id), BigInt(10000), parseEther("1")],
+      args: [BigInt(id), BigInt(10000), parseEther("1"), parseEther("500")],
     }, {
       onSuccess: () => setTxStatus("Vault creation tx submitted!"),
       onError: (err) => setTxStatus(`Error: ${err.message.slice(0, 80)}`),

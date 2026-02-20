@@ -11,6 +11,7 @@ import {
   Bot,
   Radio,
   Settings,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -30,6 +31,7 @@ const navItems = [
   { path: "/breed", label: "Breeding Lab", icon: Dna },
   { path: "/agent", label: "Agent", icon: Bot },
   { path: "/vault", label: "Vaults", icon: Radio },
+  { path: "/risk", label: "Risk Board", icon: SlidersHorizontal },
   { path: "/admin", label: "Settings", icon: Settings },
 ];
 

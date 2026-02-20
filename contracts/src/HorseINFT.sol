@@ -23,6 +23,7 @@ contract HorseINFT is ERC721, Ownable {
         bool breedingAvailable;
         bool injured;
         bool retired;
+        bool xFactorCarrier; // enlarged heart gene (X-chromosome inheritance)
         string encryptedURI; // 0G storage pointer / rootHash
         bytes32 metadataHash;
     }
@@ -68,6 +69,7 @@ contract HorseINFT is ERC721, Ownable {
             breedingAvailable: data_.breedingAvailable,
             injured: data_.injured,
             retired: data_.retired,
+            xFactorCarrier: data_.xFactorCarrier,
             encryptedURI: encryptedURI_,
             metadataHash: metadataHash_
         });

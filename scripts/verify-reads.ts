@@ -18,7 +18,7 @@ const deployerAddr = "0x9bebf5B8418C9D49b30A1F8D4F35B56C346fa092" as `0x${string
 const chain = { id: 16602, name: "0G", nativeCurrency: { decimals: 18, name: "ETH", symbol: "ETH" }, rpcUrls: { default: { http: [RPC] } } } as const;
 const client = createPublicClient({ chain, transport: http(RPC) });
 
-const horseAbi = parseAbi(["function getHorseData(uint256) view returns ((string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, string encryptedURI, bytes32 metadataHash))"]);
+const horseAbi = parseAbi(["function getHorseData(uint256) view returns ((string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash))"]);
 const marketAbi = parseAbi(["function listings(uint256) view returns (uint256 studFeeADI, uint256 maxUses, uint256 usedCount, bool useAllowlist, bool active)"]);
 const adiAbi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const agentAbi = parseAbi(["function profiles(uint256) view returns (string name, string version, string specialization, string modelBundleRootHash)"]);

@@ -10,6 +10,7 @@ import {
   calculateCD,
   classifyDistance,
 } from "../../shared/dosage.js";
+import { detectXFactor, type PedigreeNode } from "../../shared/x-factor.js";
 import { XGBoostPredictor, type HorseInput } from "./xgboost-predictor.js";
 
 export type { FeatureVector, ValuationResult, ValuationEngine, MarketData };
@@ -88,6 +89,38 @@ function applyDosage(
 }
 
 // ---------------------------------------------------------------------------
+// X-Factor premium
+// ---------------------------------------------------------------------------
+
+function applyXFactor(
+  features: FeatureVector,
+  breakdown: Record<string, number>,
+  value: number,
+  pedigreeMap?: Map<number, PedigreeNode>,
+): { value: number; breakdown: Record<string, number> } {
+  if (!features.xFactorCarrier && !pedigreeMap) return { value, breakdown };
+
+  let multiplier = 1.0;
+  if (features.xFactorCarrier) {
+    multiplier = 1.15;
+  } else if (pedigreeMap && features.sireId != null && features.damId != null) {
+    const targetId = features.sireId * 1000 + features.damId; // synthetic id
+    const result = detectXFactor(targetId, pedigreeMap);
+    multiplier = result.breedingPremiumMultiplier;
+  }
+
+  if (multiplier === 1.0) return { value, breakdown };
+
+  return {
+    value: value * multiplier,
+    breakdown: {
+      ...breakdown,
+      xFactorMultiplier: multiplier,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // FormulaEngine
 // ---------------------------------------------------------------------------
 
@@ -98,9 +131,11 @@ export class FormulaEngine implements ValuationEngine {
     let flat = flattenBreakdown(result.breakdown);
     const dosageResult = applyDosage(features, flat, result.value);
     flat = dosageResult.breakdown;
+    const xFactorResult = applyXFactor(features, flat, dosageResult.value);
+    flat = xFactorResult.breakdown;
 
     return {
-      value: dosageResult.value,
+      value: xFactorResult.value,
       confidence: 1.0,
       breakdown: flat,
       engineVersion: "formula-v1",

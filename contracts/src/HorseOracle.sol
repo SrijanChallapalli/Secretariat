@@ -4,16 +4,46 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./HorseINFT.sol";
 
-/// @title HorseOracle - Role-based race result, injury, news updates; updates valuation
+/// @title HorseOracle - Role-based race result, injury, news, and biometric updates
 contract HorseOracle is AccessControl {
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
     HorseINFT public horseNFT;
 
+    // Biometric types
+    uint8 public constant BIOMETRIC_STRIDE_LENGTH = 0;
+    uint8 public constant BIOMETRIC_HEART_RATE    = 1;
+    uint8 public constant BIOMETRIC_GAIT_SYMMETRY = 2;
+    uint8 public constant BIOMETRIC_RESPIRATION   = 3;
+    uint8 public constant BIOMETRIC_TEMPERATURE   = 4;
+
+    struct BiometricReading {
+        uint8   biometricType;
+        uint256 value;
+        uint256 baseline;
+        uint16  deviationBps; // how far from baseline in basis points
+        uint256 timestamp;
+    }
+
+    // tokenId => latest reading per biometric type
+    mapping(uint256 => mapping(uint8 => BiometricReading)) public latestBiometrics;
+
     event RaceResultReported(uint256 indexed tokenId, uint8 placing, uint256 earningsADI);
     event InjuryReported(uint256 indexed tokenId, uint16 severityBps);
     event NewsReported(uint256 indexed tokenId, uint16 sentimentBps);
+    event BiometricReported(
+        uint256 indexed tokenId,
+        uint8   indexed biometricType,
+        uint256 value,
+        uint256 baseline,
+        uint16  deviationBps
+    );
+    event BiometricAnomalyDetected(
+        uint256 indexed tokenId,
+        uint8   indexed biometricType,
+        uint256 value,
+        uint16  deviationBps
+    );
 
-    // Off-chain pipeline commits: agent-computed valuation + event hash
     event ValuationCommitted(
         uint256 indexed tokenId,
         uint8   indexed eventType,
@@ -59,8 +89,52 @@ contract HorseOracle is AccessControl {
         emit NewsReported(tokenId, sentimentBps);
     }
 
+    /// @notice Report a biometric reading for a horse (stride length, heart rate, gait, etc.)
+    /// @param tokenId Horse token ID
+    /// @param biometricType One of the BIOMETRIC_* constants
+    /// @param value The measured value
+    /// @param baseline The expected baseline value for this metric
+    /// @param anomalyThresholdBps If deviationBps exceeds this, emit anomaly event
+    function reportBiometric(
+        uint256 tokenId,
+        uint8   biometricType,
+        uint256 value,
+        uint256 baseline,
+        uint16  anomalyThresholdBps
+    ) external onlyRole(ORACLE_ROLE) {
+        require(biometricType <= BIOMETRIC_TEMPERATURE, "Invalid biometric type");
+        require(baseline > 0, "Zero baseline");
+
+        uint16 deviationBps;
+        if (value >= baseline) {
+            deviationBps = uint16(((value - baseline) * 10000) / baseline);
+        } else {
+            deviationBps = uint16(((baseline - value) * 10000) / baseline);
+        }
+
+        latestBiometrics[tokenId][biometricType] = BiometricReading({
+            biometricType: biometricType,
+            value: value,
+            baseline: baseline,
+            deviationBps: deviationBps,
+            timestamp: block.timestamp
+        });
+
+        emit BiometricReported(tokenId, biometricType, value, baseline, deviationBps);
+
+        if (deviationBps > anomalyThresholdBps) {
+            emit BiometricAnomalyDetected(tokenId, biometricType, value, deviationBps);
+        }
+    }
+
+    function getLatestBiometric(uint256 tokenId, uint8 biometricType)
+        external view returns (BiometricReading memory)
+    {
+        return latestBiometrics[tokenId][biometricType];
+    }
+
     /// @notice Commit an agent-computed valuation tied to a canonical event hash.
-    /// @param eventType 0=RACE_RESULT, 1=INJURY, 2=NEWS
+    /// @param eventType 0=RACE_RESULT, 1=INJURY, 2=NEWS, 3=BIOMETRIC
     function commitValuation(
         uint256 tokenId,
         uint8   eventType,
