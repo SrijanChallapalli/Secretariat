@@ -1,3 +1,4 @@
+<<<<<<< ours
 import dotenv from "dotenv";
 import path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
@@ -6,12 +7,25 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import fs from "fs";
+=======
+import { env } from "./env.js";
+import express from "express";
+import cors from "cors";
+import multer from "multer";
+>>>>>>> theirs
 import { uploadRoute } from "./og-upload.js";
 import { downloadRoute } from "./og-download.js";
 import { valuationRoute } from "./valuation-route.js";
 import { breedingRoute } from "./breeding-route.js";
+<<<<<<< ours
 import { startIndexer, getTrainingData } from "./event-indexer.js";
 import { getPredictions, getAccuracy } from "./prediction-log.js";
+=======
+import { biometricRoute } from "./biometric-route.js";
+import { startIndexer, getTrainingData } from "./event-indexer.js";
+import { getPredictions, getAccuracy } from "./prediction-log.js";
+import { simulateEventRoute, applyEventRoute } from "./oracle-pipeline.js";
+>>>>>>> theirs
 
 const app = express();
 app.use(cors());
@@ -23,6 +37,13 @@ app.post("/og/upload", upload.single("file"), uploadRoute);
 app.get("/og/download/:rootHash", downloadRoute);
 app.post("/valuation/calculate", valuationRoute);
 app.post("/breeding/recommend", breedingRoute);
+<<<<<<< ours
+=======
+app.post("/biometric/calculate", biometricRoute);
+
+app.post("/events/simulate", simulateEventRoute);
+app.post("/oracle/apply-event", applyEventRoute);
+>>>>>>> theirs
 
 app.get("/training/events", (_req, res) => {
   try {
@@ -61,7 +82,11 @@ app.get("/predictions/accuracy", (_req, res) => {
   }
 });
 
+<<<<<<< ours
 const PORT = process.env.PORT ?? 4000;
+=======
+const PORT = env.PORT;
+>>>>>>> theirs
 app.listen(PORT, () => {
   console.log(`Secretariat server on http://localhost:${PORT}`);
   try {

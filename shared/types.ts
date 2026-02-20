@@ -2,9 +2,26 @@
  * Shared types for the Secretariat valuation engine.
  *
  * Canonical source of truth — imported by both app/ (Next.js) and server/ (Express).
+<<<<<<< ours
  * Keep this file dependency-free (no runtime imports).
  */
 
+=======
+ * Keep this file dependency-free (no runtime imports) — except re-exports from siblings.
+ */
+
+export type {
+  HorseEvent,
+  RaceResultEvent,
+  InjuryEvent,
+  NewsEvent,
+  HorseEventBase,
+  EventSource,
+  SourceKind,
+} from "./events.js";
+export { stableStringify, canonicalizeEvent } from "./events.js";
+
+>>>>>>> theirs
 // ---------------------------------------------------------------------------
 // Feature vector
 // ---------------------------------------------------------------------------
@@ -36,6 +53,12 @@ export interface FeatureVector {
   offspringCount?: number;
   offspringWins?: number;
 
+<<<<<<< ours
+=======
+  // Genetic markers
+  xFactorCarrier?: boolean; // enlarged heart gene (X-chromosome inheritance)
+
+>>>>>>> theirs
   // Future ML features (nullable — filled when oracle/data available)
   dosageProfile?: [number, number, number, number, number]; // [B, I, C, S, P]
   dosageIndex?: number;
@@ -107,6 +130,92 @@ export interface TrainingEvent {
 }
 
 // ---------------------------------------------------------------------------
+<<<<<<< ours
+=======
+// Biometric reading (from on-chain oracle)
+// ---------------------------------------------------------------------------
+
+export interface BiometricReading {
+  biometricType: number; // 0=stride, 1=heartRate, 2=gaitSymmetry, 3=respiration, 4=temperature
+  value: number;
+  baseline: number;
+  deviationBps: number;
+  timestamp: number;
+}
+
+export const BIOMETRIC_TYPES = {
+  STRIDE_LENGTH: 0,
+  HEART_RATE: 1,
+  GAIT_SYMMETRY: 2,
+  RESPIRATION: 3,
+  TEMPERATURE: 4,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Biometric scan (computed subsystem analysis)
+// ---------------------------------------------------------------------------
+
+export type BiometricLabel = "EXCEPTIONAL" | "STRONG" | "AVERAGE" | "RISK";
+
+export type BiometricSubsystemId = "heart" | "lungs" | "skeletal" | "musculature" | "joints";
+
+export interface BiometricSubsystem {
+  id: BiometricSubsystemId;
+  score: number; // 0–100
+  label: BiometricLabel;
+  confidence: number; // 0–1
+  reasons: string[]; // 2–4 bullets
+  impactBps: number; // valuation basis points effect
+  highlights: string[]; // UI region ids
+  flags?: string[];
+}
+
+export interface BiometricScanResult {
+  schemaVersion: "1.0";
+  horseTokenId: number;
+  generatedAt: string; // ISO
+  engineVersion: string; // e.g. "biometric-v1"
+  overall: {
+    score: number;
+    label: BiometricLabel;
+    confidence: number;
+    valuationMultiplierBps: number;
+  };
+  subsystems: BiometricSubsystem[];
+  notes?: string[];
+  source?: { kind: "SIMULATION" | "ORACLE" | "MANUAL"; confidence: number };
+}
+
+// ---------------------------------------------------------------------------
+// Risk configuration (DeFAI Mixing Board parameters)
+// ---------------------------------------------------------------------------
+
+export interface RiskConfig {
+  minValuationADI: number;
+  maxDrawdownBps: number;
+  maxPositionSizeBps: number;
+  healthThreshold: number;
+  strideDeltaThresholdBps: number;
+  peakValuation: number;
+  stopLossEnabled: boolean;
+  autoRetireOnHealth: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Invoice (automated OpEx)
+// ---------------------------------------------------------------------------
+
+export interface InvoiceData {
+  id: number;
+  provider: string;
+  amount: number;
+  invoiceHash: string;
+  status: "pending" | "approved" | "rejected" | "paid";
+  submittedAt: number;
+}
+
+// ---------------------------------------------------------------------------
+>>>>>>> theirs
 // Prediction log entry (for accuracy tracking)
 // ---------------------------------------------------------------------------
 
