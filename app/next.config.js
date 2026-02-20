@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ["three"],
   // Reduce risk of loading stale HTML/chunks after a new build (browser won’t cache doc or _next/static)
   async headers() {
     return [

@@ -141,6 +141,45 @@ export const BIOMETRIC_TYPES = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Biometric scan result (produced by biometric-engine)
+// ---------------------------------------------------------------------------
+
+export type BiometricLabel = "EXCEPTIONAL" | "STRONG" | "AVERAGE" | "RISK";
+export type BiometricSubsystemId =
+  | "heart"
+  | "lungs"
+  | "skeletal"
+  | "musculature"
+  | "joints";
+
+export interface BiometricSubsystem {
+  id: BiometricSubsystemId;
+  score: number;
+  label: BiometricLabel;
+  confidence: number;
+  reasons: string[];
+  impactBps: number;
+  highlights: string[];
+  flags?: string[];
+}
+
+export interface BiometricScanResult {
+  schemaVersion: "1.0";
+  horseTokenId: number;
+  generatedAt: string;
+  engineVersion: string;
+  overall: {
+    score: number;
+    label: BiometricLabel;
+    confidence: number;
+    valuationMultiplierBps: number;
+  };
+  subsystems: BiometricSubsystem[];
+  notes?: string[];
+  source?: { kind: "SIMULATION" | "ORACLE" | "MANUAL"; confidence: number };
+}
+
+// ---------------------------------------------------------------------------
 // Risk configuration (DeFAI Mixing Board parameters)
 // ---------------------------------------------------------------------------
 

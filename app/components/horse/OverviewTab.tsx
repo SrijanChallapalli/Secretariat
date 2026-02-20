@@ -12,6 +12,7 @@ import {
 import { Trophy } from "lucide-react";
 import { formatMoney, pctColorClass } from "@/lib/format";
 import { PedigreeTree } from "@/components/PedigreeTree";
+import { BiometricScanSection } from "@/components/horse/BiometricScanSection";
 import type { HorseFullData } from "@/data/mockHorses";
 
 interface OverviewTabProps {
@@ -120,6 +121,8 @@ export function OverviewTab({ horse }: OverviewTabProps) {
           </div>
         ))}
       </div>
+
+      <BiometricScanSection tokenId={horse.id} />
 
       <div className="rounded-lg border border-white/10 bg-black/20 p-5">
         <PedigreeTree

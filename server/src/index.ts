@@ -6,6 +6,7 @@ import { uploadRoute } from "./og-upload.js";
 import { downloadRoute } from "./og-download.js";
 import { valuationRoute } from "./valuation-route.js";
 import { breedingRoute } from "./breeding-route.js";
+import { biometricRoute } from "./biometric-route.js";
 import { startIndexer, getTrainingData } from "./event-indexer.js";
 import { getPredictions, getAccuracy } from "./prediction-log.js";
 import { simulateEventRoute, applyEventRoute } from "./oracle-pipeline.js";
@@ -20,6 +21,7 @@ app.post("/og/upload", upload.single("file"), uploadRoute);
 app.get("/og/download/:rootHash", downloadRoute);
 app.post("/valuation/calculate", valuationRoute);
 app.post("/breeding/recommend", breedingRoute);
+app.post("/biometric/calculate", biometricRoute);
 
 app.post("/events/simulate", simulateEventRoute);
 app.post("/oracle/apply-event", applyEventRoute);

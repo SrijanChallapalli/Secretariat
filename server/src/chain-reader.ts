@@ -69,6 +69,7 @@ export async function fetchHorseFeatures(
     birthTimestamp: Number(r.birthTimestamp ?? r[1] ?? 0),
     sireId: Number(r.sireId ?? r[2] ?? 0),
     damId: Number(r.damId ?? r[3] ?? 0),
+    xFactorCarrier: Boolean(r.xFactorCarrier ?? r[11]),
   };
 
   const valuationADIRaw = BigInt(r.valuationADI ?? r[6] ?? 0);
