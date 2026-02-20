@@ -1,0 +1,128 @@
+
+
+Seabiscuit 1933 (106 offspring)
+Bottom
+NameYearSexBornBreedLevelFamilyDamDamSire
+Arabian Sea1943SUSATBW FGolden ArabyGolden Sun
+Bart's Rock1947MUSATBSt.w FSag RockRock Man
+Bismarck Sea
+1942MUSATBSt.p FFrivolousCoronach
+Caspian Sea1944SUSATBW FTB-2-sGay KnightessBright Knight
+Conning Tower1942FUSATBFair MargaretFairway
+Disentangle1948FUSATBRavelledSoon Over
+Dressed Up1941FUSATBW FDressageBull Dog
+Embarcadero1947FUSATBW FBoston LuBostonian
+Flying Clipper1945MUSATBW FCarmanchitaSickle
+Gala Sea1947MUSATBW FGalomarSir Gallahad III
+Gay Biscuit1945SUSATBW FTB-2-sGay KnightessBright Knight
+Generals Aide1942SUSATBW FJennie GalSir Gallahad III
+King Biscuit
+1943SUSATBLiberteTresiete
+Mediterranean1942SUSATBSt.p FDark ConventTraumer
+Mia Mar1944FUSATBChiquita MiaHadagal
+Miss Veloz1946FUSATBW FYolanditaSnark
+My Biscuit1946FUSATBTB-3-mSeventh HeavenHustle On
+My Sea1947MUSATBW FChiquita MiaHadagal
+Paramarine1942MUSATBW FCarmanchitaSickle
+Phantom Sea
+1942SUSATBSt.p FFair KnightessBright Knight
+Queen Biscuit
+1943FUSATBW FFrivolousCoronach
+Rice Biscuit1946FUSATBRice CropSickle
+Sand Castle1942FUSATBFlying Sands IISandwich
+Sea Ace
+1943MUSATBCarmanchitaSickle
+Sea Action1944MUSATBFair KnightessBright Knight
+Sea Aide1942FUSATBGrey NurseSir Greysteel
+Sea Anemone1941FUSATBTB-23Lucille KWhiskalong
+Sea Angel1945FUSATBW FFlo IIAlcantara II
+Sea Beauty1946FUSATBW FIlleannaPolymelian
+Sea Belle1940FUSATBFlying BelleFlying Ebony
+Sea Clipper1945MUSATBW FIlleannaPolymelian
+Sea Comber1947MUSATBSonja IISantiago
+Sea Consort1947FUSATBW FQueen HelenLight Brigade
+Sea Convoy
+1940MUSATBW FIlleannaPolymelian
+Sea Countess1945FUSATBW FFair KnightessBright Knight
+Sea Crag1946MUSATBSag RockRock Man
+Sea Dreamer1947SUSATBW FTB-3-eDreamlandChicle
+Sea Fiddler1943MUSATBW FTB-1gVirginia IIGainsborough
+Sea Flasher1944SUSATBW FIlleannaPolymelian
+Sea Flight1946MUSATBFlying Sands IISandwich
+Sea Floe1942FUSATBW FFlo IIAlcantara II
+Sea Flora1948FUSATBW FTB-4-mIlleannaPolymelian
+Sea Flyer1943MUSATBW FFlying Sands IISandwich
+Sea Food1944FUSATBFishwifeHalcyon
+Sea Frolic
+1940FUSATBSt.p FSun FrolicSun Briar
+Sea Galley1947FUSATBW FAlahadSir Gallahad III
+Sea Gambol1947MUSATBW FSun FrolicSun Briar
+Sea Garden
+1947FUSATBSt.w F4mIlleannaPolymelian
+Sea Glory1944FUSATBW FTB-1gVirginia IIGainsborough
+Sea Gnat1942FUSATBBlack GnatChicle
+Sea Goddess1943FUSATBW FCatherine GloverGainsborough
+Sea Going1945SUSATBW FTB-3-eDreamlandChicle
+Sea Gold1944FUSATBW FGoldrimTetratema
+Sea Image1944FUSATBFair MargaretFairway
+Sea Imp1943FUSATBW FBuskinBlandford
+Sea Isle1942FUSATBW FSonja IISantiago
+Sea Kit1942FUSATBCatherine GloverGainsborough
+Sea Knight1940MUSATBFair KnightessBright Knight
+Sea Knightess1943FUSATBFair KnightessBright Knight
+Sea Liberty1944FUSATBLiberteTresiete
+Sea Linn1946MUSATBChiquita MiaHadagal
+Sea Lion1942MUSATBW FCoramineStimulus
+
+NameYearSexBornBreedLevelFamilyDamDamSire
+Sea Lullaby1942FUSATBW FStar SingerCaruso
+Sea Maid1943FUSATBNedticaNeddie
+Sea Majesty1945MUSATBQueen HelenLight Brigade
+Sea Mate1947MUSATBBuskinBlandford
+Sea Memory1948FUSATBW FGalomarSir Gallahad III
+Sea Mine1947FUSATBCoramineStimulus
+Sea Mite1940FUSATBDressageBull Dog
+Sea Novice1947FUSATBW FDark ConventTraumer
+Sea Nun1945FUSATBDark ConventTraumer
+Sea Nymph1942FUSATBIce MaidenBuchan
+Sea Officer1945MUSATBW FFrivolousCoronach
+Sea Patrol
+1940MUSATBW FLady RiafWar Cry
+Sea Pilgrim1947FUSATBW FTB-A1Salem SkirtBy-Pass II
+Sea Prince1944MUSATBQueen HelenLight Brigade
+Sea Queen
+1943FUSATBFishwifeHalcyon
+Sea Quest1944FUSATBBlack GnatChicle
+Sea Ruler1944MUSATBDark ConventTraumer
+Sea Scholar1948MUSATBSt.p FAlma MaterRhodes Scholar
+Sea Sister1946FUSATBDark ConventTraumer
+Sea Skipper1940MUSATBW FLucille KWhiskalong
+Sea Song1944FUSATBW FSonja IISantiago
+Sea Sovereign
+1942SUSATBSt.w FQueen HelenLight Brigade
+Sea Splendor1944MUSATBW FSun FrolicSun Briar
+Sea Spoils1944FUSATBFrivolousCoronach
+Sea Spray1942FUSATBSt.w FSun FrolicSun Briar
+Sea Sturgeon1945SUSATBW FFishwifeHalcyon
+Sea Swallow
+1942SUSATBSt.w FIlleannaPolymelian
+Sea Tide1944FUSATBJoan OrpenOrpen
+Sea Trader1947MUSATBW FAlaska QueenKayak
+Sea Treasure
+1945FUSATBW FTB-20cGoldrimTetratema
+Sea Vengeance1948MUSATBW FFlying Sands IISandwich
+Sea Virgin1942FUSATBTB-1gVirginia IIGainsborough
+Sea Vista1943FUSATBW FSag RockRock Man
+Sea Voyager1946MUSATBFrivolousCoronach
+Sea Warrior1942MUSATBW FJoan OrpenOrpen
+Sea Wave1944FUSATBTB-A1Miss YankeeBostonian
+Seabehest1947FUSATBW FBehestBlue Larkspur
+Seagaret1945FUSATBFair MargaretFairway
+Shady Biscuit1948FUSATBAll ForlornMenifee
+Sparkling Sea1944MUSATBW FTB-1-nMarie GalanteBrantome
+Super Bomber1943MUSATBW FLucille KWhiskalong
+Super Sea1946MUSATBW FCarmanchitaSickle
+Tea and Cakes1941FUSATBPusillaDastur
+Tropical Sea1944MUSATBSt.w FTB-3-eDreamlandChicle
+Copyright sporthorse-data.com 2005-2026. All rights reserved data is protected by database right.
+Top

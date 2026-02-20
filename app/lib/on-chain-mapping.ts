@@ -51,6 +51,26 @@ function riskFromPedigree(pedigree: number): RiskLevel {
   return "High";
 }
 
+function computeAge(birthTimestamp: bigint): string {
+  if (birthTimestamp <= 0n) return "—";
+  const birthMs = Number(birthTimestamp) * 1000;
+  const ageMs = Date.now() - birthMs;
+  const years = Math.floor(ageMs / (365.25 * 24 * 60 * 60 * 1000));
+  if (years < 1) {
+    const months = Math.floor(ageMs / (30.44 * 24 * 60 * 60 * 1000));
+    return months <= 0 ? "< 1 mo" : `${months} mo`;
+  }
+  return `${years} yr`;
+}
+
+function bloodlineLabel(parentId: bigint): string {
+  return parentId > 0n ? `Horse #${parentId}` : "Founder";
+}
+
+function sireOrDamLabel(parentId: bigint): string {
+  return parentId > 0n ? `Horse #${parentId}` : "Founder";
+}
+
 export function mapToHorseHeatmapItem(
   tokenId: number,
   raw: RawHorseData,
@@ -62,8 +82,8 @@ export function mapToHorseHeatmapItem(
   return {
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
-    bloodline1: raw.sireId > 0n ? `Horse #${raw.sireId}` : "—",
-    bloodline2: raw.damId > 0n ? `Horse #${raw.damId}` : "—",
+    bloodline1: bloodlineLabel(raw.sireId),
+    bloodline2: bloodlineLabel(raw.damId),
     valuation,
     changePct: 0,
     risk: riskFromPedigree(pedigree),
@@ -88,8 +108,8 @@ export function mapToMarketListing(
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
     color,
-    bloodlineA: raw.sireId > 0n ? `Horse #${raw.sireId}` : "—",
-    bloodlineB: raw.damId > 0n ? `Horse #${raw.damId}` : "—",
+    bloodlineA: bloodlineLabel(raw.sireId),
+    bloodlineB: bloodlineLabel(raw.damId),
     valuationUsd,
     change24hPct: 0,
     soundness,
@@ -129,18 +149,18 @@ export function mapToHorseFullData(
     pedigree,
     color,
     foaled,
-    sire: raw.sireId > 0n ? `Horse #${raw.sireId}` : "Unknown",
-    dam: raw.damId > 0n ? `Horse #${raw.damId}` : "Unknown",
-    majorResult: "—",
-    stewardNote: "—",
+    sire: sireOrDamLabel(raw.sireId),
+    dam: sireOrDamLabel(raw.damId),
+    majorResult: "No results yet",
+    stewardNote: "Pending review",
     dnaHash: raw.dnaHash && raw.dnaHash !== "0x" ? raw.dnaHash : "0x0",
-    metadataPointer: "—",
-    lastResult: "—",
-    oracleSource: "—",
+    metadataPointer: raw.dnaHash && raw.dnaHash !== "0x" ? raw.dnaHash.slice(0, 18) : "N/A",
+    lastResult: "Awaiting oracle",
+    oracleSource: "0G Oracle",
     valuationOverTime: [],
     oracleEvents: [],
     stats: {
-      age: raw.birthTimestamp > 0n ? "—" : "—",
+      age: computeAge(raw.birthTimestamp),
       totalWins: 0,
       gradeWins: 0,
       injuries: raw.injured ? 1 : 0,

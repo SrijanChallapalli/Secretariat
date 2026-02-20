@@ -17,7 +17,15 @@ export type HorseWithListing = {
   listing: RawListing | null;
 };
 
-export function useHorsesWithListings(): HorseWithListing[] {
+export type UseHorsesResult = {
+  horses: HorseWithListing[];
+  isLoading: boolean;
+  isError: boolean;
+};
+
+export function useHorsesWithListings(): HorseWithListing[];
+export function useHorsesWithListings(opts: { withStatus: true }): UseHorsesResult;
+export function useHorsesWithListings(opts?: { withStatus?: boolean }): HorseWithListing[] | UseHorsesResult {
   const horseCalls = HORSE_IDS.map((id) => ({
     address: addresses.horseINFT,
     abi: abis.HorseINFT,
@@ -31,10 +39,10 @@ export function useHorsesWithListings(): HorseWithListing[] {
     args: [BigInt(id)] as [bigint],
   }));
 
-  const { data: horsesData } = useReadContracts({ contracts: horseCalls });
-  const { data: listingsData } = useReadContracts({ contracts: listingCalls });
+  const { data: horsesData, isLoading: hLoading, isError: hError } = useReadContracts({ contracts: horseCalls });
+  const { data: listingsData, isLoading: lLoading, isError: lError } = useReadContracts({ contracts: listingCalls });
 
-  return useMemo(() => {
+  const horses = useMemo(() => {
     if (!horsesData || !listingsData) return [];
     const result: HorseWithListing[] = [];
     for (let i = 0; i < HORSE_IDS.length; i++) {
@@ -52,4 +60,9 @@ export function useHorsesWithListings(): HorseWithListing[] {
     }
     return result;
   }, [horsesData, listingsData]);
+
+  if (opts?.withStatus) {
+    return { horses, isLoading: hLoading || lLoading, isError: hError || lError };
+  }
+  return horses;
 }

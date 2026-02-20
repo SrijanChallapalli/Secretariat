@@ -4,8 +4,33 @@ import { useWriteContract } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
 import { useState } from "react";
 
+const SERVER_URL =
+  process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
+
+type EventType = "RACE_RESULT" | "INJURY" | "NEWS";
+
+interface PipelineResult {
+  eventHash: string;
+  newValuationADI: string;
+  previousValuationADI: string;
+  multiplier: number;
+  valuationResult: {
+    value: number;
+    confidence: number;
+    breakdown?: Record<string, number>;
+    explanation?: string;
+  };
+  txHash: string;
+  ogRootHash: string | null;
+  ogTxHash: string | null;
+  canonicalJson: string;
+  submittedAt: string;
+}
+
 export default function AdminPage() {
   const [horseId, setHorseId] = useState("0");
+
+  // --- Direct oracle state ---
   const [placing, setPlacing] = useState("1");
   const [earnings, setEarnings] = useState("100");
   const [severity, setSeverity] = useState("500");
@@ -15,8 +40,107 @@ export default function AdminPage() {
   const { writeContract: reportInjury } = useWriteContract();
   const { writeContract: reportNews } = useWriteContract();
 
+  // --- Pipeline state ---
+  const [pipeType, setPipeType] = useState<EventType>("RACE_RESULT");
+  const [pipeFinish, setPipeFinish] = useState("1");
+  const [pipeEarnings, setPipeEarnings] = useState("100");
+  const [pipeTrack, setPipeTrack] = useState("");
+  const [pipeRaceClass, setPipeRaceClass] = useState("");
+  const [pipeOdds, setPipeOdds] = useState("");
+  const [pipeSeverity, setPipeSeverity] = useState("500");
+  const [pipeInjuryType, setPipeInjuryType] = useState("");
+  const [pipeDaysOut, setPipeDaysOut] = useState("");
+  const [pipeSentiment, setPipeSentiment] = useState("200");
+  const [pipeHeadline, setPipeHeadline] = useState("");
+  const [uploadTo0g, setUploadTo0g] = useState(false);
+  const [pipeLoading, setPipeLoading] = useState(false);
+  const [pipeError, setPipeError] = useState<string | null>(null);
+  const [pipeResult, setPipeResult] = useState<PipelineResult | null>(null);
+  const [showCanonical, setShowCanonical] = useState(false);
+
+  async function runPipeline() {
+    setPipeLoading(true);
+    setPipeError(null);
+    setPipeResult(null);
+
+    try {
+      // Build params for simulation
+      let params: Record<string, unknown> = {};
+      if (pipeType === "RACE_RESULT") {
+        params = {
+          finishPosition: Number(pipeFinish),
+          earningsADI: pipeEarnings,
+          ...(pipeTrack && { track: pipeTrack }),
+          ...(pipeRaceClass && { raceClass: pipeRaceClass }),
+          ...(pipeOdds && { odds: Number(pipeOdds) }),
+        };
+      } else if (pipeType === "INJURY") {
+        params = {
+          severityBps: Number(pipeSeverity),
+          ...(pipeInjuryType && { injuryType: pipeInjuryType }),
+          ...(pipeDaysOut && { expectedDaysOut: Number(pipeDaysOut) }),
+        };
+      } else {
+        params = {
+          sentimentBps: Number(pipeSentiment),
+          ...(pipeHeadline && { headline: pipeHeadline }),
+        };
+      }
+
+      // Step 1: Simulate
+      const simRes = await fetch(`${SERVER_URL}/events/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tokenId: Number(horseId),
+          type: pipeType,
+          params,
+        }),
+      });
+      if (!simRes.ok) {
+        const err = await simRes.json().catch(() => ({ error: simRes.statusText }));
+        throw new Error(err.error || "Simulate failed");
+      }
+      const simData = await simRes.json();
+
+      // Step 2: Apply event
+      const applyRes = await fetch(`${SERVER_URL}/oracle/apply-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: simData.event,
+          uploadTo0g,
+        }),
+      });
+      if (!applyRes.ok) {
+        const err = await applyRes.json().catch(() => ({ error: applyRes.statusText }));
+        throw new Error(err.error || "Apply event failed");
+      }
+      const result: PipelineResult = await applyRes.json();
+      setPipeResult(result);
+    } catch (e) {
+      setPipeError((e as Error).message);
+    } finally {
+      setPipeLoading(false);
+    }
+  }
+
+  function formatADI(weiStr: string): string {
+    try {
+      const n = BigInt(weiStr);
+      const whole = n / BigInt(1e18);
+      return `${whole.toLocaleString()} ADI`;
+    } catch {
+      return weiStr;
+    }
+  }
+
+  const inputCls =
+    "w-full px-3 py-2 rounded-sm bg-secondary border border-border text-sm";
+  const labelCls = "block text-xs text-muted-foreground";
+
   return (
-    <div className="space-y-6 max-w-md">
+    <div className="space-y-8 max-w-lg">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-wide text-foreground">
           Oracle / Admin
@@ -26,36 +150,40 @@ export default function AdminPage() {
           updates.
         </p>
       </header>
-      <div className="space-y-4">
+
+      {/* Shared token ID */}
+      <div className="space-y-1">
+        <label className={labelCls}>Horse token ID</label>
+        <input
+          type="number"
+          className={inputCls}
+          value={horseId}
+          onChange={(e) => setHorseId(e.target.value)}
+        />
+      </div>
+
+      {/* ============================================================ */}
+      {/* SECTION 1: Direct on-chain oracle buttons (existing)          */}
+      {/* ============================================================ */}
+      <section className="space-y-4 border border-border rounded-md p-4">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          Direct On-Chain Oracle
+        </h2>
+
         <div className="space-y-1">
-          <label className="block text-xs text-muted-foreground">
-            Horse token ID
-          </label>
-          <input
-            type="number"
-            className="w-full px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
-            value={horseId}
-            onChange={(e) => setHorseId(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs text-muted-foreground">
-            Race: placing (1-3)
-          </label>
+          <label className={labelCls}>Race: placing (1-3)</label>
           <input
             type="number"
             min={1}
             max={3}
-            className="w-full px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
+            className={inputCls}
             value={placing}
             onChange={(e) => setPlacing(e.target.value)}
           />
-          <label className="block text-xs text-muted-foreground mt-1">
-            Earnings ADI (wei)
-          </label>
+          <label className={`${labelCls} mt-1`}>Earnings ADI (wei)</label>
           <input
             type="text"
-            className="w-full px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
+            className={inputCls}
             value={earnings}
             onChange={(e) => setEarnings(e.target.value)}
           />
@@ -73,13 +201,12 @@ export default function AdminPage() {
             Report race result
           </button>
         </div>
+
         <div className="space-y-1">
-          <label className="block text-xs text-muted-foreground">
-            Injury: severity (bps 0-10000)
-          </label>
+          <label className={labelCls}>Injury: severity (bps 0-5000)</label>
           <input
             type="text"
-            className="w-full px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
+            className={inputCls}
             value={severity}
             onChange={(e) => setSeverity(e.target.value)}
           />
@@ -97,13 +224,12 @@ export default function AdminPage() {
             Report injury
           </button>
         </div>
+
         <div className="space-y-1">
-          <label className="block text-xs text-muted-foreground">
-            News: sentiment (bps, can be negative)
-          </label>
+          <label className={labelCls}>News: sentiment (bps)</label>
           <input
             type="text"
-            className="w-full px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
+            className={inputCls}
             value={sentiment}
             onChange={(e) => setSentiment(e.target.value)}
           />
@@ -121,7 +247,264 @@ export default function AdminPage() {
             Report news
           </button>
         </div>
-      </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 2: Pipeline — Simulate + Revalue (Agent)              */}
+      {/* ============================================================ */}
+      <section className="space-y-4 border border-primary/40 rounded-md p-4">
+        <h2 className="text-sm font-semibold text-primary uppercase tracking-wider">
+          Simulate + Revalue (Agent)
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Builds a canonical event, runs the valuation engine on the server, and
+          commits the result on-chain via commitValuation.
+        </p>
+
+        {/* Event type selector */}
+        <div className="space-y-1">
+          <label className={labelCls}>Event type</label>
+          <select
+            className={inputCls}
+            value={pipeType}
+            onChange={(e) => setPipeType(e.target.value as EventType)}
+          >
+            <option value="RACE_RESULT">Race Result</option>
+            <option value="INJURY">Injury</option>
+            <option value="NEWS">News</option>
+          </select>
+        </div>
+
+        {/* Dynamic params */}
+        {pipeType === "RACE_RESULT" && (
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <label className={labelCls}>Finish position</label>
+              <input
+                type="number"
+                min={1}
+                className={inputCls}
+                value={pipeFinish}
+                onChange={(e) => setPipeFinish(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={labelCls}>Earnings ADI</label>
+              <input
+                type="text"
+                className={inputCls}
+                value={pipeEarnings}
+                onChange={(e) => setPipeEarnings(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <label className={labelCls}>Track</label>
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={pipeTrack}
+                  onChange={(e) => setPipeTrack(e.target.value)}
+                  placeholder="optional"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={labelCls}>Race class</label>
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={pipeRaceClass}
+                  onChange={(e) => setPipeRaceClass(e.target.value)}
+                  placeholder="Grade 1"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={labelCls}>Odds</label>
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={pipeOdds}
+                  onChange={(e) => setPipeOdds(e.target.value)}
+                  placeholder="optional"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pipeType === "INJURY" && (
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <label className={labelCls}>Severity (bps 0-10000)</label>
+              <input
+                type="number"
+                className={inputCls}
+                value={pipeSeverity}
+                onChange={(e) => setPipeSeverity(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className={labelCls}>Injury type</label>
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={pipeInjuryType}
+                  onChange={(e) => setPipeInjuryType(e.target.value)}
+                  placeholder="optional"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={labelCls}>Days out</label>
+                <input
+                  type="number"
+                  className={inputCls}
+                  value={pipeDaysOut}
+                  onChange={(e) => setPipeDaysOut(e.target.value)}
+                  placeholder="optional"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pipeType === "NEWS" && (
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <label className={labelCls}>Sentiment (bps 0-5000)</label>
+              <input
+                type="number"
+                className={inputCls}
+                value={pipeSentiment}
+                onChange={(e) => setPipeSentiment(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={labelCls}>Headline</label>
+              <input
+                type="text"
+                className={inputCls}
+                value={pipeHeadline}
+                onChange={(e) => setPipeHeadline(e.target.value)}
+                placeholder="optional"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 0G toggle */}
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={uploadTo0g}
+            onChange={(e) => setUploadTo0g(e.target.checked)}
+            className="rounded border-border"
+          />
+          Upload event bundle to 0G Storage
+        </label>
+
+        {/* Submit */}
+        <button
+          className="w-full px-4 py-2 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          onClick={runPipeline}
+          disabled={pipeLoading}
+        >
+          {pipeLoading ? "Processing..." : "Simulate + Revalue (Server Oracle)"}
+        </button>
+
+        {/* Error */}
+        {pipeError && (
+          <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-sm p-3">
+            {pipeError}
+          </div>
+        )}
+
+        {/* Results */}
+        {pipeResult && (
+          <div className="space-y-3 text-sm">
+            <h3 className="font-semibold text-foreground">Pipeline Result</h3>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <span className="text-muted-foreground">Event Hash</span>
+              <span className="font-mono truncate" title={pipeResult.eventHash}>
+                {pipeResult.eventHash.slice(0, 18)}...
+              </span>
+
+              <span className="text-muted-foreground">Previous Valuation</span>
+              <span>{formatADI(pipeResult.previousValuationADI)}</span>
+
+              <span className="text-muted-foreground">New Valuation</span>
+              <span className="font-semibold text-primary">
+                {formatADI(pipeResult.newValuationADI)}
+              </span>
+
+              <span className="text-muted-foreground">Multiplier</span>
+              <span>{pipeResult.multiplier.toFixed(4)}x</span>
+
+              <span className="text-muted-foreground">Confidence</span>
+              <span>{(pipeResult.valuationResult.confidence * 100).toFixed(0)}%</span>
+
+              <span className="text-muted-foreground">Tx Hash</span>
+              <span className="font-mono truncate" title={pipeResult.txHash}>
+                {pipeResult.txHash.slice(0, 18)}...
+              </span>
+
+              {pipeResult.ogRootHash && (
+                <>
+                  <span className="text-muted-foreground">0G Root Hash</span>
+                  <a
+                    href={`${SERVER_URL}/og/download/${pipeResult.ogRootHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline font-mono truncate"
+                    title={pipeResult.ogRootHash}
+                  >
+                    {pipeResult.ogRootHash.slice(0, 18)}...
+                  </a>
+                </>
+              )}
+            </div>
+
+            {/* Explanation */}
+            {pipeResult.valuationResult.explanation && (
+              <p className="text-xs text-muted-foreground italic">
+                {typeof pipeResult.valuationResult.explanation === "string"
+                  ? pipeResult.valuationResult.explanation
+                  : (pipeResult.valuationResult.explanation as any)?.summary}
+              </p>
+            )}
+
+            {/* Breakdown */}
+            {pipeResult.valuationResult.breakdown && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  Valuation breakdown
+                </summary>
+                <pre className="mt-1 p-2 bg-secondary rounded-sm overflow-auto max-h-40 text-[10px]">
+                  {JSON.stringify(pipeResult.valuationResult.breakdown, null, 2)}
+                </pre>
+              </details>
+            )}
+
+            {/* Canonical JSON */}
+            <div>
+              <button
+                onClick={() => setShowCanonical(!showCanonical)}
+                className="text-xs text-muted-foreground hover:text-foreground underline"
+              >
+                {showCanonical ? "Hide" : "Show"} canonical JSON
+              </button>
+              {showCanonical && (
+                <textarea
+                  readOnly
+                  className="mt-1 w-full h-32 p-2 bg-secondary border border-border rounded-sm text-[10px] font-mono resize-y"
+                  value={pipeResult.canonicalJson}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

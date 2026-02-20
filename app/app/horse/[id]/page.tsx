@@ -2,7 +2,8 @@
 
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { useReadContracts } from "wagmi";
+import { useReadContracts, useWriteContract, useAccount, useWaitForTransactionReceipt } from "wagmi";
+import { parseEther } from "viem";
 import { addresses, abis } from "@/lib/contracts";
 import { isOnChainHorse } from "@/lib/on-chain-horses";
 import {
@@ -23,6 +24,9 @@ export default function HorseDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const [activeTab, setActiveTab] = useState<HorseTabId>("overview");
+  const [txStatus, setTxStatus] = useState<string | null>(null);
+  const { address } = useAccount();
+  const { writeContract, data: txHash, isPending: isTxPending } = useWriteContract();
 
   const horseCall = {
     address: addresses.horseINFT,
@@ -62,6 +66,35 @@ export default function HorseDetailPage() {
     return mapToHorseFullData(id, raw, listing, owner ?? "0x0");
   })();
 
+  const handleBuyShares = () => {
+    if (!address) { setTxStatus("Connect wallet first"); return; }
+    setTxStatus("Creating vault…");
+    writeContract({
+      address: addresses.syndicateVaultFactory,
+      abi: abis.HorseSyndicateVaultFactory,
+      functionName: "createVault",
+      args: [BigInt(id), BigInt(10000), parseEther("1")],
+    }, {
+      onSuccess: () => setTxStatus("Vault creation tx submitted!"),
+      onError: (err) => setTxStatus(`Error: ${err.message.slice(0, 80)}`),
+    });
+  };
+
+  const handlePurchaseBreedingRight = () => {
+    if (!address) { setTxStatus("Connect wallet first"); return; }
+    setTxStatus("Purchasing breeding right…");
+    const seed = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}` as `0x${string}`;
+    writeContract({
+      address: addresses.breedingMarketplace,
+      abi: abis.BreedingMarketplace,
+      functionName: "purchaseBreedingRight",
+      args: [BigInt(id), seed],
+    }, {
+      onSuccess: () => setTxStatus("Breeding right purchased!"),
+      onError: (err) => setTxStatus(`Error: ${err.message.slice(0, 80)}`),
+    });
+  };
+
   if (!horseResult) {
     return (
       <div className="max-w-4xl space-y-6">
@@ -71,8 +104,11 @@ export default function HorseDetailPage() {
         >
           ← Back
         </Link>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-12 text-center">
-          <p className="text-sm text-muted-foreground">Loading…</p>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-12 text-center animate-pulse">
+          <div className="h-8 w-48 bg-white/10 rounded mx-auto mb-4" />
+          <div className="h-4 w-64 bg-white/10 rounded mx-auto mb-2" />
+          <div className="h-4 w-40 bg-white/10 rounded mx-auto" />
+          <p className="text-sm text-muted-foreground mt-4">Loading horse data from chain…</p>
         </div>
       </div>
     );
@@ -104,10 +140,17 @@ export default function HorseDetailPage() {
 
   return (
     <div className="max-w-5xl space-y-8">
+      {txStatus && (
+        <div className={`rounded-lg border p-3 text-sm ${txStatus.startsWith("Error") ? "border-red-500/30 bg-red-500/5 text-red-400" : "border-terminal-green/30 bg-terminal-green/5 text-terminal-green"}`}>
+          {txStatus}
+          <button type="button" onClick={() => setTxStatus(null)} className="ml-2 text-xs underline opacity-70">dismiss</button>
+        </div>
+      )}
+
       <HorseHero
         horse={horse}
-        onBuyShares={() => {}}
-        onPurchaseBreedingRight={() => {}}
+        onBuyShares={handleBuyShares}
+        onPurchaseBreedingRight={handlePurchaseBreedingRight}
       />
 
       <div className="rounded-lg border border-white/10 bg-black/20 p-5">

@@ -14,8 +14,14 @@ import {
 } from "lucide-react";
 import { useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ogGalileo, adiTestnet } from "@/lib/chains";
 
 import LiveFeed from "@/components/LiveFeed";
+
+const chainNames: Record<number, string> = {
+  [ogGalileo.id]: "0G Demo",
+  [adiTestnet.id]: "ADI Institutional",
+};
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -102,7 +108,10 @@ export function TerminalLayout({ children }: TerminalLayoutProps) {
             <span className="tracking-wide">ORACLE WIRE</span>
           </button>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="px-3 py-1.5 rounded-full border border-prestige-gold/40 bg-prestige-gold/10 text-xs font-medium text-prestige-gold tracking-wide">
+              {chainNames[chainId] ?? `Chain ${chainId}`}
+            </div>
             <ConnectButton
               chainStatus="full"
               showBalance={{ smallScreen: false, largeScreen: true }}

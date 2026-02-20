@@ -7,21 +7,30 @@
     "server"
   ],
   "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "npm run sync-env && npm run dev:server & npm run dev:app",
+    "dev:app": "npm run sync-env && npm run dev --workspace=app",
+    "dev:server": "npm run dev --workspace=server",
     "check": "npm run build --workspaces --if-present && cd contracts && forge build && forge fmt --check .",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "deploy:og": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_0G --broadcast --with-gas-price 3000000000 --priority-gas-price 2000000000",
+    "format": "npx prettier --write \"**/*.{ts,tsx,js,mjs,json,md}\" --ignore-path .gitignore",
+    "precommit": "node scripts/check-no-secrets.mjs",
+    "deploy:og": "node scripts/deploy-og.mjs",
     "deploy:adi": "cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_ADI --broadcast",
     "seed:demo": "tsx scripts/seed-demo.ts",
+    "seed:minimal": "tsx scripts/seed-minimal.ts",
     "demo:reset": "tsx scripts/demo-reset.ts",
     "env:from-broadcast": "tsx scripts/write-env-from-broadcast.ts",
     "generate:training": "tsx scripts/generate-training-data.ts",
-    "sync-env": "cp .env app/.env 2>/dev/null || true",
+    "extract:pdf": "node scripts/extract-pdf-text.cjs",
+    "sync-env": "node -e \"const fs=require('fs'),p=require('path');try{fs.copyFileSync(p.join(__dirname,'.env'),p.join(__dirname,'app','.env'))}catch{}\"",
     "run:server": "cd server && npm run dev",
     "run:app": "cd app && npm run dev"
   },
   "devDependencies": {
     "dotenv": "^16.3.1",
+    "pdf-parse": "^1.1.1",
     "tsx": "^4.7.0",
     "viem": "^2.0.0"
   }

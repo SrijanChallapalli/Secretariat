@@ -6,6 +6,7 @@ import { AdiDisplay } from "@/components/AdiDisplay";
 import { mapToHorseHeatmapItem } from "@/lib/on-chain-mapping";
 import { MarketHeatmap } from "@/components/market/MarketHeatmap";
 import { useHorsesWithListings } from "@/lib/hooks/useHorsesWithListings";
+import type { UseHorsesResult } from "@/lib/hooks/useHorsesWithListings";
 
 type DashboardHorse = {
   tokenId: number;
@@ -17,8 +18,17 @@ type DashboardHorse = {
   retired: boolean;
 };
 
+function SkeletonCard() {
+  return (
+    <div className="rounded-lg border border-sidebar-border/60 bg-card p-6 animate-pulse">
+      <div className="h-3 w-24 bg-white/10 rounded mb-4" />
+      <div className="h-8 w-32 bg-white/10 rounded" />
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const horsesWithListings = useHorsesWithListings();
+  const { horses: horsesWithListings, isLoading, isError } = useHorsesWithListings({ withStatus: true }) as UseHorsesResult;
 
   const horses = useMemo<DashboardHorse[]>(() => {
     return horsesWithListings.map(({ tokenId, raw }) => ({
@@ -58,6 +68,42 @@ export default function Dashboard() {
   );
   const topValuations = sortedByVal.slice(0, 4);
   const lowestValuations = sortedByVal.slice(-4).reverse();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-10 max-w-7xl mx-auto">
+        <header className="space-y-3 pb-6 border-b border-white/5">
+          <h1 className="text-3xl font-heading font-bold tracking-wide text-brand-ivory">
+            Market Overview
+          </h1>
+          <p className="text-base text-muted-foreground/80 font-sans max-w-2xl leading-relaxed">
+            Loading on-chain data…
+          </p>
+        </header>
+        <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+        </section>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-12 animate-pulse">
+          <div className="h-40 bg-white/5 rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-10 max-w-7xl mx-auto">
+        <header className="space-y-3 pb-6 border-b border-white/5">
+          <h1 className="text-3xl font-heading font-bold tracking-wide text-brand-ivory">
+            Market Overview
+          </h1>
+        </header>
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-8 text-center">
+          <p className="text-sm text-red-400">Failed to load on-chain data. Please check your network connection and try again.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 max-w-7xl mx-auto">

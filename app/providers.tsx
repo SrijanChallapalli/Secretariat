@@ -4,12 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, http } from "wagmi";
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from "@rainbow-me/rainbowkit";
 import { ogGalileo, adiTestnet } from "@/lib/chains";
+import { env } from "@/lib/env";
 import "@rainbow-me/rainbowkit/styles.css";
 
-// WalletConnect Cloud projectId must be exactly 32 characters. Get one at https://cloud.walletconnect.com
-const raw = typeof process.env.NEXT_PUBLIC_WALLETCONNECT_ID === "string" ? process.env.NEXT_PUBLIC_WALLETCONNECT_ID.trim() : "";
 const VALID_FALLBACK = "00000000000000000000000000000000";
-const projectId = raw.length === 32 ? raw : VALID_FALLBACK;
+const projectId = env.NEXT_PUBLIC_WALLETCONNECT_ID.length === 32
+  ? env.NEXT_PUBLIC_WALLETCONNECT_ID
+  : VALID_FALLBACK;
 const config = getDefaultConfig({
   appName: "Secretariat",
   projectId,

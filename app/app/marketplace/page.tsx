@@ -7,13 +7,17 @@ import { MarketToolbar } from "@/components/market/MarketToolbar";
 import { MarketTable, type SortKey } from "@/components/market/MarketTable";
 import type { MarketListing } from "@/data/mockMarketListings";
 import { useHorsesWithListings } from "@/lib/hooks/useHorsesWithListings";
+import type { UseHorsesResult } from "@/lib/hooks/useHorsesWithListings";
+
+const PAGE_SIZE = 15;
 
 export default function MarketplacePage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("valuationUsd");
   const [sortAsc, setSortAsc] = useState(false);
+  const [page, setPage] = useState(0);
 
-  const horsesWithListings = useHorsesWithListings();
+  const { horses: horsesWithListings, isLoading, isError } = useHorsesWithListings({ withStatus: true }) as UseHorsesResult;
 
   const listings = useMemo<MarketListing[]>(
     () =>
@@ -93,12 +97,46 @@ export default function MarketplacePage() {
   }, [listings]);
 
   const handleSort = (key: SortKey) => {
+    setPage(0);
     if (sortKey === key) setSortAsc(!sortAsc);
     else {
       setSortKey(key);
       setSortAsc(key === "name");
     }
   };
+
+  const handleSearchChange = (v: string) => {
+    setSearch(v);
+    setPage(0);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-8 animate-pulse">
+          <div className="h-6 w-48 bg-white/10 rounded mb-4" />
+          <div className="h-4 w-64 bg-white/10 rounded" />
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-lg border border-white/10 bg-black/20 p-4 animate-pulse">
+              <div className="h-4 w-full bg-white/5 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-8 text-center">
+          <p className="text-sm text-red-400">Failed to load marketplace data. Please check your network connection and try again.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -111,15 +149,44 @@ export default function MarketplacePage() {
       <MarketToolbar
         count={filtered.length}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={handleSearchChange}
       />
 
       <MarketTable
-        listings={filtered}
+        listings={filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
         sortKey={sortKey}
         sortAsc={sortAsc}
         onSort={handleSort}
       />
+
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-xs text-muted-foreground">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="px-3 py-1.5 text-xs rounded border border-white/20 text-foreground hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              ← Prev
+            </button>
+            <span className="text-xs text-muted-foreground">
+              Page {page + 1} of {Math.ceil(filtered.length / PAGE_SIZE)}
+            </span>
+            <button
+              type="button"
+              disabled={(page + 1) * PAGE_SIZE >= filtered.length}
+              onClick={() => setPage((p) => p + 1)}
+              className="px-3 py-1.5 text-xs rounded border border-white/20 text-foreground hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
         <span>ON-CHAIN DATA · ALL VALUATIONS IN ADI</span>

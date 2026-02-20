@@ -38,6 +38,8 @@ import {
   type TimelineStepId,
 } from "@/components/breeding/ExecutionTimeline";
 import { useHorsesWithListings } from "@/lib/hooks/useHorsesWithListings";
+import { getTxExplorerUrl } from "@/lib/block-explorer";
+import { toast } from "sonner";
 
 const BREEDING_PLAN_TYPE = {
   BreedingPlan: [
@@ -68,10 +70,17 @@ function mapRecommendationToDisplay(
     ? String(stallion.name)
     : `Stallion #${rec.stallionTokenId}`;
 
+  const { traitMatch, pedigreeSynergy, inbreedingRisk } = rec.explainability;
+  const reasons: string[] = [];
+  if (pedigreeSynergy >= 0.7) reasons.push("pedigree synergy");
+  if (traitMatch >= 0.6) reasons.push("strong trait match");
+  if (inbreedingRisk < 0.1) reasons.push("low inbreeding risk");
+  if (reasons.length === 0) reasons.push("viable pairing");
+  const whyPrefix = rank === 1 ? "Top pick: " : "";
   const explanation =
     rec.riskFlags.length === 0
-      ? "Strong pedigree cross with complementary traits. Low-risk pairing."
-      : `Consider: ${rec.riskFlags.join(", ")}.`;
+      ? `${whyPrefix}${reasons.join(" + ")}.`
+      : `${whyPrefix}${reasons.join(" + ")}. Consider: ${rec.riskFlags.join(", ")}.`;
 
   return {
     stallionTokenId: rec.stallionTokenId,
@@ -90,7 +99,7 @@ function mapRecommendationToDisplay(
 }
 
 function toHorseTraits(
-  horsesWithListings: ReturnType<typeof useHorsesWithListings>
+  horsesWithListings: import("@/lib/hooks/useHorsesWithListings").HorseWithListing[]
 ): HorseTraits[] {
   return horsesWithListings.map(({ tokenId, raw, listing }) => ({
     tokenId,
@@ -170,17 +179,28 @@ export default function BreedPage() {
     query: { enabled: selectedStallionId !== null && !!address },
   });
 
-  const handlePurchaseRight = async (stallionId: number) => {
+  const handlePurchaseRight = (stallionId: number) => {
     const seed = keccak256(
       toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
     );
-    await purchaseRight({
-      address: addresses.breedingMarketplace,
-      abi: abis.BreedingMarketplace,
-      functionName: "purchaseBreedingRight",
-      args: [BigInt(stallionId), seed],
-    });
-    setTimelineStep("breed");
+    purchaseRight(
+      {
+        address: addresses.breedingMarketplace,
+        abi: abis.BreedingMarketplace,
+        functionName: "purchaseBreedingRight",
+        args: [BigInt(stallionId), seed],
+      },
+      {
+        onSuccess: (hash) => {
+          setTimelineStep("breed");
+          const url = getTxExplorerUrl(chainId, hash);
+          toast.success("Breeding right purchased", {
+            action: { label: "View on Explorer", onClick: () => window.open(url, "_blank") },
+          });
+        },
+        onError: () => toast.error("Failed to purchase breeding right"),
+      }
+    );
   };
 
   const handleExecute = async (stallionId: number, name: string) => {
@@ -219,40 +239,62 @@ export default function BreedPage() {
     const purchaseSeed = keccak256(
       toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
     );
-    await executePlan({
-      address: addresses.agentExecutor,
-      abi: abis.AgentExecutor,
-      functionName: "execute",
-      args: [
-        plan,
-        name || "Offspring",
-        salt,
-        purchaseSeed,
-        sig as `0x${string}`,
-      ],
-    });
-    setTimelineStep("offspring_minted");
+    executePlan(
+      {
+        address: addresses.agentExecutor,
+        abi: abis.AgentExecutor,
+        functionName: "execute",
+        args: [
+          plan,
+          name || "Offspring",
+          salt,
+          purchaseSeed,
+          sig as `0x${string}`,
+        ],
+      },
+      {
+        onSuccess: (hash) => {
+          setTimelineStep("offspring_minted");
+          const url = getTxExplorerUrl(chainId, hash);
+          toast.success("Breeding plan executed", {
+            action: { label: "View on Explorer", onClick: () => window.open(url, "_blank") },
+          });
+        },
+        onError: () => toast.error("Failed to execute breeding plan"),
+      }
+    );
   };
 
-  const handleDirectBreed = async () => {
+  const handleDirectBreed = () => {
     if (!address || !mare || selectedStallionId === null) return;
     if (!directBreedName || !validateHorseName(directBreedName).valid) return;
 
     const salt = keccak256(
       toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
     );
-    await breedDirect({
-      address: addresses.breedingMarketplace,
-      abi: abis.BreedingMarketplace,
-      functionName: "breed",
-      args: [
-        BigInt(selectedStallionId),
-        BigInt(mare.tokenId),
-        directBreedName,
-        salt,
-      ],
-    });
-    setTimelineStep("offspring_minted");
+    breedDirect(
+      {
+        address: addresses.breedingMarketplace,
+        abi: abis.BreedingMarketplace,
+        functionName: "breed",
+        args: [
+          BigInt(selectedStallionId),
+          BigInt(mare.tokenId),
+          directBreedName,
+          salt,
+        ],
+      },
+      {
+        onSuccess: (hash) => {
+          setTimelineStep("offspring_minted");
+          const url = getTxExplorerUrl(chainId, hash);
+          toast.success("Offspring minted", {
+            action: { label: "View on Explorer", onClick: () => window.open(url, "_blank") },
+          });
+        },
+        onError: () => toast.error("Failed to breed"),
+      }
+    );
   };
 
   const handleReviewAndApprove = (stallionId: number) => {
@@ -304,7 +346,11 @@ export default function BreedPage() {
 
               {mare && (
                 <div className="rounded-md border border-border bg-card p-4">
-                  <PedigreeTree tokenId={mare.tokenId} maxDepth={4} />
+                  <PedigreeTree
+                    tokenId={mare.tokenId}
+                    horseName={mare.name}
+                    maxDepth={4}
+                  />
                 </div>
               )}
             </div>

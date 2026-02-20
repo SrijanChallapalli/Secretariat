@@ -1,25 +1,14 @@
-import { createPublicClient, http, parseAbi, parseAbiItem, type Log } from "viem";
-import type { TrainingEvent, FeatureVector } from "../../shared/types.js";
+import { parseAbiItem, type Log } from "viem";
+import type { TrainingEvent } from "../../shared/types.js";
+import { getPublicClient, fetchHorseFeatures } from "./chain-reader.js";
 import fs from "fs";
 import path from "path";
 
 const DATA_DIR = path.resolve(process.cwd(), "server/data");
 const JSONL_PATH = path.join(DATA_DIR, "training-events.jsonl");
 
-const RPC = process.env.RPC_0G || "https://evmrpc-testnet.0g.ai";
 const HORSE_INFT = process.env.NEXT_PUBLIC_HORSE_INFT;
 const HORSE_ORACLE = process.env.NEXT_PUBLIC_HORSE_ORACLE;
-
-const chain = {
-  id: Number(process.env.CHAIN_ID_0G ?? 16602),
-  name: "0G",
-  nativeCurrency: { decimals: 18, name: "ETH", symbol: "ETH" },
-  rpcUrls: { default: { http: [RPC] } },
-} as const;
-
-const horseINFTAbi = parseAbi([
-  "function getHorseData(uint256) view returns ((string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, string encryptedURI, bytes32 metadataHash))",
-]);
 
 const oracleEvents = [
   parseAbiItem("event RaceResultReported(uint256 indexed tokenId, uint8 placing, uint256 earningsADI)"),
@@ -27,18 +16,13 @@ const oracleEvents = [
   parseAbiItem("event NewsReported(uint256 indexed tokenId, uint16 sentimentBps)"),
 ];
 
+const pipelineEvents = [
+  parseAbiItem("event ValuationCommitted(uint256 indexed tokenId, uint8 indexed eventType, bytes32 indexed eventHash, uint256 newValuationADI, bytes32 ogRootHash)"),
+];
+
 const inftEvents = [
   parseAbiItem("event ValuationUpdated(uint256 indexed tokenId, uint256 oldVal, uint256 newVal)"),
 ];
-
-let indexerClient: ReturnType<typeof createPublicClient> | null = null;
-
-function getClient() {
-  if (!indexerClient) {
-    indexerClient = createPublicClient({ chain, transport: http(RPC) });
-  }
-  return indexerClient;
-}
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -51,54 +35,21 @@ function appendEvent(event: TrainingEvent) {
   fs.appendFileSync(JSONL_PATH, JSON.stringify(event) + "\n");
 }
 
-async function fetchHorseFeatures(tokenId: number): Promise<{ features: Partial<FeatureVector>; valuationADI: number }> {
-  if (!HORSE_INFT || HORSE_INFT === "0x0000000000000000000000000000000000000000") {
-    return { features: {}, valuationADI: 0 };
-  }
-  try {
-    const client = getClient();
-    const raw = await client.readContract({
-      address: HORSE_INFT as `0x${string}`,
-      abi: horseINFTAbi,
-      functionName: "getHorseData",
-      args: [BigInt(tokenId)],
-    });
-
-    const r = raw as any;
-    const traits: number[] = (r.traitVector ?? r[4] ?? []).map(Number);
-
-    const features: Partial<FeatureVector> = {
-      speed: traits[0] ?? 0,
-      stamina: traits[1] ?? 0,
-      temperament: traits[2] ?? 0,
-      conformation: traits[3] ?? 0,
-      health: traits[4] ?? 0,
-      agility: traits[5] ?? 0,
-      raceIQ: traits[6] ?? 0,
-      consistency: traits[7] ?? 0,
-      pedigreeScore: Number(r.pedigreeScore ?? r[5] ?? 0),
-      injured: Boolean(r.injured ?? r[9]),
-      retired: Boolean(r.retired ?? r[10]),
-      birthTimestamp: Number(r.birthTimestamp ?? r[1] ?? 0),
-      sireId: Number(r.sireId ?? r[2] ?? 0),
-      damId: Number(r.damId ?? r[3] ?? 0),
-    };
-
-    const valuationADI = Number(r.valuationADI ?? r[6] ?? 0);
-    return { features, valuationADI };
-  } catch (e) {
-    console.warn(`Event indexer: failed to fetch HorseData for token ${tokenId}:`, (e as Error).message);
-    return { features: {}, valuationADI: 0 };
-  }
-}
-
 async function buildTrainingEvent(
   log: Log,
   eventType: string,
   eventData: Record<string, unknown>,
 ): Promise<TrainingEvent> {
   const tokenId = Number((eventData.tokenId as number) ?? 0);
-  const { features, valuationADI } = await fetchHorseFeatures(tokenId);
+  let features = {};
+  let valuationADI = 0;
+  try {
+    const result = await fetchHorseFeatures(tokenId);
+    features = result.features;
+    valuationADI = result.valuationADI;
+  } catch (e) {
+    console.warn(`Event indexer: failed to fetch HorseData for token ${tokenId}:`, (e as Error).message);
+  }
 
   let valuationBefore = valuationADI;
   let valuationAfter = valuationADI;
@@ -128,7 +79,7 @@ export function startIndexer(): void {
       return;
     }
 
-    const client = getClient();
+    const client = getPublicClient();
 
     if (HORSE_ORACLE && HORSE_ORACLE !== "0x0000000000000000000000000000000000000000") {
       for (const event of oracleEvents) {
@@ -155,6 +106,35 @@ export function startIndexer(): void {
           },
           onError: (err) => {
             console.warn("Event indexer oracle watch error:", err.message);
+          },
+        });
+      }
+
+      // Pipeline-committed valuations
+      for (const event of pipelineEvents) {
+        client.watchEvent({
+          address: HORSE_ORACLE as `0x${string}`,
+          event,
+          onLogs: (logs) => {
+            for (const log of logs) {
+              (async () => {
+                try {
+                  const args = (log as any).args ?? {};
+                  const data: Record<string, unknown> = {};
+                  for (const [k, v] of Object.entries(args)) {
+                    data[k] = typeof v === "bigint" ? Number(v) : v;
+                  }
+                  const te = await buildTrainingEvent(log, event.name, data);
+                  appendEvent(te);
+                  console.log(`Indexed ${event.name} for token ${te.tokenId} (newVal: ${data.newValuationADI})`);
+                } catch (e) {
+                  console.warn("Event indexer error (pipeline):", e);
+                }
+              })();
+            }
+          },
+          onError: (err) => {
+            console.warn("Event indexer pipeline watch error:", err.message);
           },
         });
       }

@@ -45,6 +45,7 @@ export const abis = {
     "function reportRaceResult(uint256 tokenId, uint8 placing, uint256 earningsADI) external",
     "function reportInjury(uint256 tokenId, uint16 severityBps) external",
     "function reportNews(uint256 tokenId, uint16 sentimentBps) external",
+    "function commitValuation(uint256 tokenId, uint8 eventType, bytes32 eventHash, uint256 newValuationADI, bytes32 ogRootHash) external",
   ]),
   BreedingAdvisorINFT: parseAbi([
     "function mint(address to, (string name, string version, string specialization, string modelBundleRootHash) profile) external returns (uint256)",

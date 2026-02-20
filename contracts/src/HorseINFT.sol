@@ -136,12 +136,17 @@ contract HorseINFT is ERC721, Ownable {
         emit BreedingStatusUpdated(tokenId, available);
     }
 
+    event InjuryStatusUpdated(uint256 indexed tokenId, bool injured);
+    event RetirementStatusUpdated(uint256 indexed tokenId, bool retired);
+
     function setInjured(uint256 tokenId, bool injured) external onlyOwnerOrOracle {
         horses[tokenId].injured = injured;
+        emit InjuryStatusUpdated(tokenId, injured);
     }
 
     function setRetired(uint256 tokenId, bool retired) external onlyOwnerOrOracle {
         horses[tokenId].retired = retired;
+        emit RetirementStatusUpdated(tokenId, retired);
     }
 
     function getEncryptedURI(uint256 tokenId) external view returns (string memory) {

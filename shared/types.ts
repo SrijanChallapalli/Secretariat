@@ -2,8 +2,19 @@
  * Shared types for the Secretariat valuation engine.
  *
  * Canonical source of truth — imported by both app/ (Next.js) and server/ (Express).
- * Keep this file dependency-free (no runtime imports).
+ * Keep this file dependency-free (no runtime imports) — except re-exports from siblings.
  */
+
+export type {
+  HorseEvent,
+  RaceResultEvent,
+  InjuryEvent,
+  NewsEvent,
+  HorseEventBase,
+  EventSource,
+  SourceKind,
+} from "./events.js";
+export { stableStringify, canonicalizeEvent } from "./events.js";
 
 // ---------------------------------------------------------------------------
 // Feature vector

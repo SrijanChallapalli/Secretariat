@@ -3,6 +3,7 @@
 .env.local
 .env.*.local
 app/.env
+server/.env
 
 # Dependencies
 node_modules/
@@ -24,6 +25,9 @@ server/data/
 # Build output
 server/dist/
 *.tsbuildinfo
+
+# Uploads (server temp)
+server/uploads/
 
 # Logs and OS
 *.log

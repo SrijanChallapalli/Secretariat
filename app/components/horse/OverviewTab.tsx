@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { Trophy } from "lucide-react";
 import { formatMoney, pctColorClass } from "@/lib/format";
+import { PedigreeTree } from "@/components/PedigreeTree";
 import type { HorseFullData } from "@/data/mockHorses";
 
 interface OverviewTabProps {
@@ -118,6 +119,14 @@ export function OverviewTab({ horse }: OverviewTabProps) {
             <p className="text-lg font-bold text-foreground">{stat.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+        <PedigreeTree
+          tokenId={horse.id}
+          horseName={horse.name}
+          maxDepth={4}
+        />
       </div>
     </div>
   );

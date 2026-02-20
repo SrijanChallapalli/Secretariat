@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Trophy } from "lucide-react";
+import { PedigreeTree } from "@/components/PedigreeTree";
 import type { HorseFullData } from "@/data/mockHorses";
 
 interface BreedingTabProps {
@@ -136,6 +137,14 @@ export function BreedingTab({ horse }: BreedingTabProps) {
             Execute With Approval
           </button>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+        <PedigreeTree
+          tokenId={horse.id}
+          horseName={horse.name}
+          maxDepth={4}
+        />
       </div>
     </div>
   );

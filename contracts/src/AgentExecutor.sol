@@ -72,6 +72,8 @@ contract AgentExecutor is EIP712 {
         address signer = digest.recover(signature);
         require(signer == plan.user, "Invalid signature");
 
+        unchecked { nonces[plan.user]++; }
+
         require(horseNFT.ownerOf(plan.mareTokenId) == plan.user, "Not mare owner");
         (uint256 studFee,,,,) = marketplace.listings(plan.chosenStallionTokenId);
         require(studFee <= plan.maxStudFeeADI && studFee <= plan.budgetADI, "Over budget");

@@ -28,6 +28,7 @@ const jetbrainsMono = JetBrains_Mono({
 import { Providers } from "@/providers";
 import { ClientOnly } from "@/components/ClientOnly";
 import { TerminalLayout } from "@/components/TerminalLayout";
+import { Toaster } from "sonner";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ClientOnly>
           <Providers>
             <TerminalLayout>{children}</TerminalLayout>
+            <Toaster richColors position="top-right" />
           </Providers>
         </ClientOnly>
       </body>

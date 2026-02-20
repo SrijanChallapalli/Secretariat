@@ -2,6 +2,8 @@
 
 Follow these steps in order. Use the same `.env` at repo root (and `app/.env` is synced after deploy).
 
+**Hackathon judges:** For a quick demo, pre-deploy to 0G testnet and run `seed:demo` so the app is ready when judges connect. See [HACKATHON.md](./HACKATHON.md) for the one-command deploy + seed flow.
+
 ---
 
 ## 1. Environment
@@ -102,6 +104,30 @@ Add and use:
   - RPC: `https://rpc.ab.testnet.adifoundation.ai/`
 
 Fund the deployer wallet with testnet ETH on the network you deploy to.
+
+---
+
+## 6. Event-Driven Valuation Pipeline (Admin)
+
+After the server and app are running (steps 4):
+
+1. Open **http://localhost:3000/admin** and connect your wallet.
+2. Scroll to the **"Simulate + Revalue (Agent)"** panel.
+3. Enter a **Horse token ID** (e.g. `0` if you seeded).
+4. Select an event type (Race Result / Injury / News) and fill in params.
+5. Click **"Simulate + Revalue (Server Oracle)"**.
+6. The panel will show: event hash, previous/new valuation, multiplier, tx hash, and explanation.
+7. (Optional) Check "Upload to 0G Storage" before clicking — the result panel will include a 0G root hash link.
+
+**Smoke test from CLI** (no browser needed):
+
+```bash
+npx tsx scripts/simulate-event.ts
+```
+
+This calls the server endpoints and prints the pipeline result.
+
+> **Note:** The server uses `ORACLE_PRIVATE_KEY` (or `DEPLOYER_PRIVATE_KEY`) to submit the `commitValuation` tx. Make sure one of these is set in `.env`.
 
 ---
 

@@ -13,6 +13,15 @@ contract HorseOracle is AccessControl {
     event InjuryReported(uint256 indexed tokenId, uint16 severityBps);
     event NewsReported(uint256 indexed tokenId, uint16 sentimentBps);
 
+    // Off-chain pipeline commits: agent-computed valuation + event hash
+    event ValuationCommitted(
+        uint256 indexed tokenId,
+        uint8   indexed eventType,
+        bytes32 indexed eventHash,
+        uint256 newValuationADI,
+        bytes32 ogRootHash
+    );
+
     constructor(address _horseNFT) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ORACLE_ROLE, msg.sender);
@@ -20,6 +29,7 @@ contract HorseOracle is AccessControl {
     }
 
     function reportRaceResult(uint256 tokenId, uint8 placing, uint256 earningsADI) external onlyRole(ORACLE_ROLE) {
+        require(placing >= 1 && placing <= 20, "Invalid placing");
         HorseINFT.HorseData memory h = horseNFT.getHorseData(tokenId);
         uint256 oldVal = h.valuationADI;
         uint256 boost = earningsADI;
@@ -32,6 +42,7 @@ contract HorseOracle is AccessControl {
     }
 
     function reportInjury(uint256 tokenId, uint16 severityBps) external onlyRole(ORACLE_ROLE) {
+        require(severityBps > 0 && severityBps <= 5000, "Severity out of range");
         HorseINFT.HorseData memory h = horseNFT.getHorseData(tokenId);
         uint256 newVal = (h.valuationADI * (10000 - severityBps)) / 10000;
         horseNFT.updateValuation(tokenId, newVal);
@@ -40,10 +51,27 @@ contract HorseOracle is AccessControl {
     }
 
     function reportNews(uint256 tokenId, uint16 sentimentBps) external onlyRole(ORACLE_ROLE) {
+        require(sentimentBps <= 5000, "Sentiment out of range");
         HorseINFT.HorseData memory h = horseNFT.getHorseData(tokenId);
         uint256 newVal = (h.valuationADI * (10000 + sentimentBps)) / 10000;
         if (newVal > type(uint256).max / 2) newVal = h.valuationADI;
         horseNFT.updateValuation(tokenId, newVal);
         emit NewsReported(tokenId, sentimentBps);
+    }
+
+    /// @notice Commit an agent-computed valuation tied to a canonical event hash.
+    /// @param eventType 0=RACE_RESULT, 1=INJURY, 2=NEWS
+    function commitValuation(
+        uint256 tokenId,
+        uint8   eventType,
+        bytes32 eventHash,
+        uint256 newValuationADI,
+        bytes32 ogRootHash
+    ) external onlyRole(ORACLE_ROLE) {
+        horseNFT.updateValuation(tokenId, newValuationADI);
+        if (eventType == 1) {
+            horseNFT.setInjured(tokenId, true);
+        }
+        emit ValuationCommitted(tokenId, eventType, eventHash, newValuationADI, ogRootHash);
     }
 }

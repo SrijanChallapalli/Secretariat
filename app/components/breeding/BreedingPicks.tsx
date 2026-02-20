@@ -171,9 +171,14 @@ export function BreedingPicks({
               </div>
 
               {pick.explanation && (
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {pick.explanation}
-                </p>
+                <div className="rounded-md border border-prestige-gold/20 bg-prestige-gold/5 px-3 py-2">
+                  <p className="text-[10px] font-semibold text-prestige-gold uppercase tracking-wider mb-0.5">
+                    Why this pick
+                  </p>
+                  <p className="text-xs text-foreground/90 leading-relaxed">
+                    {pick.explanation}
+                  </p>
+                </div>
               )}
 
               <div className="pt-1">

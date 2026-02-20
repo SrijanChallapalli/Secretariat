@@ -3,10 +3,11 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./HorseINFT.sol";
 
 /// @title BreedingMarketplace - List stallions, buy breeding rights, breed
-contract BreedingMarketplace is Ownable {
+contract BreedingMarketplace is Ownable, ReentrancyGuard {
     IERC20 public adi;
     HorseINFT public horseNFT;
 
@@ -28,12 +29,22 @@ contract BreedingMarketplace is Ownable {
     /// seed committed at purchase for deterministic offspring (stallionId => buyer => seed)
     mapping(uint256 => mapping(address => bytes32)) public purchaseSeed;
 
+    uint256 public breedingRightDuration = 365 days;
+    uint256 public sireWeight = 55;
+    uint256 public damWeight = 45;
+    uint256 public mutationRange = 5;
+    uint256 public decayFactor = 950;
+
     event Listed(uint256 indexed stallionId, uint256 studFeeADI, uint256 maxUses, bool useAllowlist);
     event Unlisted(uint256 indexed stallionId);
     event BreedingRightPurchased(uint256 indexed stallionId, address buyer, uint256 expiry, bytes32 seed);
     event Bred(uint256 indexed stallionId, uint256 indexed mareId, uint256 indexed offspringId);
+    event BreedingParamsUpdated(uint256 sireWeight, uint256 damWeight, uint256 mutationRange, uint256 decayFactor);
+    event BreedingRightDurationUpdated(uint256 duration);
 
     constructor(address _adi, address _horseNFT) Ownable(msg.sender) {
+        require(_adi != address(0), "Zero ADI address");
+        require(_horseNFT != address(0), "Zero HorseNFT address");
         adi = IERC20(_adi);
         horseNFT = HorseINFT(_horseNFT);
     }
@@ -61,7 +72,7 @@ contract BreedingMarketplace is Ownable {
         emit Unlisted(stallionId);
     }
 
-    function purchaseBreedingRight(uint256 stallionId, bytes32 seed) external {
+    function purchaseBreedingRight(uint256 stallionId, bytes32 seed) external nonReentrant {
         Listing storage list_ = listings[stallionId];
         require(list_.active, "Not listed");
         require(list_.usedCount < list_.maxUses, "Max uses");
@@ -71,7 +82,7 @@ contract BreedingMarketplace is Ownable {
         address seller = horseNFT.ownerOf(stallionId);
         adi.transferFrom(msg.sender, seller, list_.studFeeADI);
 
-        uint256 expiry = block.timestamp + 365 days;
+        uint256 expiry = block.timestamp + breedingRightDuration;
         breedingRightExpiry[stallionId][msg.sender] = expiry;
         purchaseSeed[stallionId][msg.sender] = seed;
         emit BreedingRightPurchased(stallionId, msg.sender, expiry, seed);
@@ -81,8 +92,26 @@ contract BreedingMarketplace is Ownable {
         return breedingRightExpiry[stallionId][user] > block.timestamp;
     }
 
+    function setBreedingParams(uint256 _sireWeight, uint256 _damWeight, uint256 _mutationRange, uint256 _decayFactor) external onlyOwner {
+        require(_sireWeight + _damWeight == 100, "Weights must sum to 100");
+        require(_mutationRange <= 20, "Mutation range too high");
+        require(_decayFactor > 0 && _decayFactor <= 1000, "Invalid decay factor");
+        sireWeight = _sireWeight;
+        damWeight = _damWeight;
+        mutationRange = _mutationRange;
+        decayFactor = _decayFactor;
+        emit BreedingParamsUpdated(_sireWeight, _damWeight, _mutationRange, _decayFactor);
+    }
+
+    function setBreedingRightDuration(uint256 _duration) external onlyOwner {
+        require(_duration >= 1 days && _duration <= 730 days, "Invalid duration");
+        breedingRightDuration = _duration;
+        emit BreedingRightDurationUpdated(_duration);
+    }
+
     function breed(uint256 stallionId, uint256 mareId, string calldata offspringName, bytes32 salt)
         external
+        nonReentrant
         returns (uint256 offspringId)
     {
         require(horseNFT.ownerOf(mareId) == msg.sender, "Not mare owner");
@@ -128,20 +157,19 @@ contract BreedingMarketplace is Ownable {
         HorseINFT.HorseData memory dam,
         bytes32 seed,
         bytes32 salt
-    ) internal pure returns (uint8[8] memory traits, uint16 pedigreeScore, bytes32 dnaHash) {
+    ) internal view returns (uint8[8] memory traits, uint16 pedigreeScore, bytes32 dnaHash) {
         bytes32 h = keccak256(abi.encodePacked(seed, salt));
         for (uint256 i = 0; i < 8; i++) {
             uint256 s = uint8(sire.traitVector[i]);
             uint256 d = uint8(dam.traitVector[i]);
-            uint256 avg = (s * 55 + d * 45) / 100;
-            uint256 mutation = (uint256(h) >> (i * 8)) % 5;
+            uint256 avg = (s * sireWeight + d * damWeight) / 100;
+            uint256 mutation = (uint256(h) >> (i * 8)) % mutationRange;
             if (mutation == 0 && avg > 0) avg--;
             else if (mutation == 4 && avg < 255) avg++;
             traits[i] = uint8(avg > 255 ? 255 : avg);
         }
-        uint32 pS = (uint32(sire.pedigreeScore) * 55 + uint32(dam.pedigreeScore) * 45) / 100;
-        uint256 decay = 950; // 5% decay per generation
-        pedigreeScore = uint16((pS * decay) / 1000);
+        uint32 pS = (uint32(sire.pedigreeScore) * uint32(sireWeight) + uint32(dam.pedigreeScore) * uint32(damWeight)) / 100;
+        pedigreeScore = uint16((pS * uint32(decayFactor)) / 1000);
         if (pedigreeScore > 10000) pedigreeScore = 10000;
         dnaHash = keccak256(abi.encodePacked(sire.dnaHash, dam.dnaHash, traits, salt));
     }

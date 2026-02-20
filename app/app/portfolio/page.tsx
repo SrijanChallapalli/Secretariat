@@ -1,6 +1,8 @@
 "use client";
 
-import { useAccount, useReadContract, useReadContracts } from "wagmi";
+import { useState } from "react";
+import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { parseAbi } from "viem";
 import { addresses, abis } from "@/lib/contracts";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
@@ -13,15 +15,18 @@ import type {
 } from "@/data/mockPortfolio";
 import { MAX_HORSE_ID_TO_FETCH } from "@/lib/on-chain-horses";
 
-const vaultAbi = [
+const vaultAbi = parseAbi([
   "function claimableFor(address) view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
-] as const;
+  "function claim() external",
+]);
 
 export default function PortfolioPage() {
   const { address } = useAccount();
+  const [claimStatus, setClaimStatus] = useState<string | null>(null);
+  const { writeContract } = useWriteContract();
 
-  const { data: balances } = useReadContract({
+  const { data: balances, isLoading: balLoading } = useReadContract({
     address: addresses.adiToken,
     abi: abis.MockADI,
     functionName: "balanceOf",
@@ -162,8 +167,17 @@ export default function PortfolioPage() {
   );
 
   const handleClaim = (horseId: number) => {
-    // TODO: wire to claim transaction
-    console.log(`Claim initiated for Horse #${horseId}`);
+    const vault = vaults.find((v) => v.horseId === horseId);
+    if (!vault) return;
+    setClaimStatus(`Claiming revenue for Horse #${horseId}…`);
+    writeContract({
+      address: vault.address,
+      abi: vaultAbi,
+      functionName: "claim",
+    }, {
+      onSuccess: () => setClaimStatus(`Claim submitted for Horse #${horseId}!`),
+      onError: (err) => setClaimStatus(`Claim error: ${err.message.slice(0, 80)}`),
+    });
   };
 
   return (
@@ -177,10 +191,28 @@ export default function PortfolioPage() {
         </p>
       </header>
 
+      {claimStatus && (
+        <div className={`rounded-lg border p-3 text-sm ${claimStatus.includes("error") ? "border-red-500/30 bg-red-500/5 text-red-400" : "border-terminal-green/30 bg-terminal-green/5 text-terminal-green"}`}>
+          {claimStatus}
+          <button type="button" onClick={() => setClaimStatus(null)} className="ml-2 text-xs underline opacity-70">dismiss</button>
+        </div>
+      )}
+
       {!address ? (
         <p className="text-sm text-muted-foreground">
           Connect your wallet to see your portfolio.
         </p>
+      ) : balLoading ? (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-white/10 bg-black/20 p-5 animate-pulse">
+                <div className="h-3 w-20 bg-white/10 rounded mb-3" />
+                <div className="h-7 w-28 bg-white/10 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
