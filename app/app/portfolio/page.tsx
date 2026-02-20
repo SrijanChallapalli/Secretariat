@@ -256,17 +256,30 @@ export default function PortfolioPage() {
         })
       : [];
 
-  const holdings: PortfolioHolding[] = revenueRows.map((r) => ({
+  const vaultHoldings: PortfolioHolding[] = revenueRows.map((r) => ({
     asset: horseNames[r.horseId] ?? `Horse #${r.horseId}`,
     horseId: r.horseId,
-    // keep on-chain quantities as bigint and format at render time
     shares: r.balance,
     totalShares: 10000n,
-    // value is 2x claimable in wei to preserve exact arithmetic
     value: r.claimable * 2n,
     pnlPct: 0,
     claimable: r.claimable,
   }));
+
+  const vaultHorseIds = new Set(vaultHoldings.map((h) => h.horseId));
+  const ownedOnlyHoldings: PortfolioHolding[] = myHorsesWithFallback
+    .filter((id) => !vaultHorseIds.has(id))
+    .map((id) => ({
+      asset: horseNames[id] ?? `Horse #${id}`,
+      horseId: id,
+      shares: 0n,
+      totalShares: 0n,
+      value: 0n,
+      pnlPct: 0,
+      claimable: 0n,
+    }));
+
+  const holdings: PortfolioHolding[] = [...ownedOnlyHoldings, ...vaultHoldings];
 
   const totalClaimable = revenueRows.reduce(
     (acc, r) => acc + r.claimable,
@@ -411,7 +424,7 @@ export default function PortfolioPage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[10px] font-sans tracking-[0.2em] text-muted-foreground uppercase">
-                MY HORSES
+                HOLDINGS
               </h2>
               <button
                 type="button"
@@ -421,59 +434,24 @@ export default function PortfolioPage() {
                 Refresh
               </button>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/20 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
-              {myHorsesWithFallback.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  No horses owned. Mint via{" "}
-                  <Link href="/breed" className="text-prestige-gold hover:underline">
-                    Breeding Lab
-                  </Link>{" "}
-                  or buy from{" "}
-                  <Link href="/marketplace" className="text-prestige-gold hover:underline">
-                    Market
-                  </Link>
-                  . Just minted? Click <strong>Refresh</strong> above, or try{" "}
-                  <Link href="/horse/7" className="text-prestige-gold hover:underline">/horse/7</Link>{" "}
-                  directly.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {myHorsesWithFallback.map((id) => (
-                    <Link
-                      key={id}
-                      href={`/horse/${id}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 hover:border-prestige-gold/30 text-sm font-medium text-foreground transition-colors"
-                    >
-                      {horseNames[id] ?? `Horse #${id}`}
-                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
 
-          <section className="space-y-4">
-            <h2 className="text-[10px] font-sans tracking-[0.2em] text-muted-foreground uppercase">
-              HOLDINGS
-            </h2>
             <div className="rounded-lg border border-white/10 bg-black/20 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
               {holdings.length === 0 ? (
                 <div className="p-12 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No holdings yet. Buy shares from{" "}
-                    <Link
-                      href="/marketplace"
-                      className="text-prestige-gold hover:underline"
-                    >
-                      Market
-                    </Link>{" "}
-                    or mint via{" "}
+                    No holdings yet. Mint via{" "}
                     <Link
                       href="/breed"
                       className="text-prestige-gold hover:underline"
                     >
                       Breeding Lab
+                    </Link>{" "}
+                    or buy from{" "}
+                    <Link
+                      href="/marketplace"
+                      className="text-prestige-gold hover:underline"
+                    >
+                      Market
                     </Link>
                     .
                   </p>
@@ -487,13 +465,13 @@ export default function PortfolioPage() {
                           ASSET
                         </th>
                         <th className="py-4 px-4 text-left text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
+                          TYPE
+                        </th>
+                        <th className="py-4 px-4 text-left text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
                           SHARES
                         </th>
                         <th className="py-4 px-4 text-left text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
                           VALUE
-                        </th>
-                        <th className="py-4 px-4 text-left text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
-                          PNL
                         </th>
                         <th className="py-4 px-4 text-left text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
                           CLAIMABLE
@@ -504,67 +482,60 @@ export default function PortfolioPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {holdings.map((row) => (
-                        <tr
-                          key={row.horseId}
-                          className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors"
-                        >
-                          <td className="py-4 px-4">
-                            <Link
-                              href={`/horse/${row.horseId}`}
-                              className="font-semibold text-foreground hover:text-prestige-gold transition-colors"
-                            >
-                              {row.asset}
-                            </Link>
-                          </td>
-                          <td className="py-4 px-4 text-muted-foreground">
-                            {row.shares}/{row.totalShares.toLocaleString()}
-                          </td>
-                          <td className="py-4 px-4 text-foreground">
-                            {formatMoneyFull(Number(row.value) / 1e18)}
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`text-terminal-green flex items-center gap-0.5 ${
-                                  row.pnlPct < 0 ? "text-terminal-red" : ""
-                                }`}
+                      {holdings.map((row) => {
+                        const isOwnerOnly = row.totalShares === 0n;
+                        return (
+                          <tr
+                            key={row.horseId}
+                            className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors"
+                          >
+                            <td className="py-4 px-4">
+                              <Link
+                                href={`/horse/${row.horseId}`}
+                                className="font-semibold text-foreground hover:text-prestige-gold transition-colors"
                               >
-                                <ArrowUpRight
-                                  className={`h-3.5 w-3.5 ${
-                                    row.pnlPct < 0 ? "rotate-180" : ""
-                                  }`}
-                                />
-                                {row.pnlPct >= 0 ? "+" : ""}
-                                {row.pnlPct.toFixed(1)}%
+                                {row.asset}
+                              </Link>
+                            </td>
+                            <td className="py-4 px-4">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                                isOwnerOnly
+                                  ? "border-prestige-gold/30 text-prestige-gold bg-prestige-gold/10"
+                                  : "border-white/20 text-muted-foreground bg-white/5"
+                              }`}>
+                                {isOwnerOnly ? "Owner" : "Shares"}
                               </span>
-                              <div className="w-16 h-1 rounded-full bg-white/10 overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-terminal-green"
-                                  style={{
-                                    width: `${Math.min(
-                                      Math.abs(row.pnlPct) / 30,
-                                      1,
-                                    ) * 100}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 font-semibold text-prestige-gold">
-                            {formatMoneyFull(Number(row.claimable) / 1e18)}
-                          </td>
-                          <td className="py-4 px-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleClaim(row.horseId)}
-                              className="px-3 py-1.5 rounded border border-white/20 text-foreground text-xs hover:bg-white/10 transition-colors"
-                            >
-                              Claim
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="py-4 px-4 text-muted-foreground">
+                              {isOwnerOnly ? "—" : `${row.shares}/${row.totalShares.toLocaleString()}`}
+                            </td>
+                            <td className="py-4 px-4 text-foreground">
+                              {isOwnerOnly ? "—" : formatMoneyFull(Number(row.value) / 1e18)}
+                            </td>
+                            <td className="py-4 px-4 font-semibold text-prestige-gold">
+                              {isOwnerOnly ? "—" : formatMoneyFull(Number(row.claimable) / 1e18)}
+                            </td>
+                            <td className="py-4 px-4 text-right">
+                              {isOwnerOnly ? (
+                                <Link
+                                  href={`/horse/${row.horseId}`}
+                                  className="px-3 py-1.5 rounded border border-white/20 text-foreground text-xs hover:bg-white/10 transition-colors inline-block"
+                                >
+                                  View
+                                </Link>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleClaim(row.horseId)}
+                                  className="px-3 py-1.5 rounded border border-white/20 text-foreground text-xs hover:bg-white/10 transition-colors"
+                                >
+                                  Claim
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
