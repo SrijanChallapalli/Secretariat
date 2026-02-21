@@ -29,6 +29,8 @@ export interface Recommendation {
   score: number;
   explainability: { traitMatch: number; pedigreeSynergy: number; inbreedingRisk: number; costPenalty: number; formBonus: number };
   riskFlags: string[];
+  aiExplanation?: string;
+  predictedOffspringValue?: number;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -110,4 +112,63 @@ export function scoreStallions(
 
 export function expectedOffspringTraits(sire: number[], dam: number[]): number[] {
   return sire.map((s, i) => Math.round((s * 0.55 + (dam[i] ?? 0) * 0.45)));
+}
+
+const SERVER_URL =
+  process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:4000";
+
+/**
+ * Fetch breeding recommendations from the server (XGBoost + 0G Compute).
+ * Falls back to client-side scoring on failure.
+ */
+export async function fetchServerRecommendations(
+  mare: HorseTraits,
+  stallions: HorseTraits[],
+  maxStudFee?: bigint,
+): Promise<{ recommendations: Recommendation[]; modelVersion: string; ogComputeEnabled: boolean }> {
+  const toServerHorse = (h: HorseTraits) => ({
+    tokenId: h.tokenId,
+    name: h.name || `Horse #${h.tokenId}`,
+    traitVector: h.traitVector,
+    pedigreeScore: h.pedigreeScore,
+    injured: h.injured,
+    studFeeADI: Number(h.studFeeADI ?? 0),
+  });
+
+  const res = await fetch(`${SERVER_URL}/breeding/recommend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mare: toServerHorse(mare),
+      stallions: stallions.map(toServerHorse),
+      maxStudFee: maxStudFee ? Number(maxStudFee) / 1e18 : 10000,
+      explain: true,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Server responded ${res.status}`);
+  const data = await res.json();
+
+  const recs: Recommendation[] = (data.recommendations ?? []).map(
+    (r: Record<string, unknown>) => ({
+      stallionTokenId: r.stallionTokenId as number,
+      score: r.score as number,
+      explainability: {
+        traitMatch: (r.explainability as Record<string, number>)?.traitMatch ?? 0,
+        pedigreeSynergy: (r.explainability as Record<string, number>)?.pedigreeSynergy ?? 0,
+        inbreedingRisk: (r.explainability as Record<string, number>)?.inbreedingRisk ?? 0,
+        costPenalty: (r.explainability as Record<string, number>)?.costPenalty ?? 0,
+        formBonus: (r.explainability as Record<string, number>)?.formBonus ?? 0,
+      },
+      riskFlags: (r.riskFlags as string[]) ?? [],
+      aiExplanation: (r.aiExplanation as string) || undefined,
+      predictedOffspringValue: (r.predictedOffspringValue as number) || undefined,
+    }),
+  );
+
+  return {
+    recommendations: recs,
+    modelVersion: data.modelVersion ?? "unknown",
+    ogComputeEnabled: data.ogComputeEnabled ?? false,
+  };
 }

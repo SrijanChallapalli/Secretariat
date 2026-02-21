@@ -95,7 +95,7 @@ export default function VaultIndexPage() {
           Connect your wallet to see your vaults.
         </p>
       ) : vaults.length === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-black/20 p-12 text-center">
+        <div className="rounded-lg border border-sidebar-border/60 bg-card p-12 text-center">
           <p className="text-sm text-muted-foreground mb-4">
             No vaults yet. Create a vault from a horse you own, or view your
             portfolio for vault positions.
@@ -118,11 +118,11 @@ export default function VaultIndexPage() {
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-white/10 bg-black/20 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+        <div className="rounded-lg border border-sidebar-border/60 bg-card overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10">
+                <tr className="border-b border-white/5">
                   <th className="py-4 px-4 text-left text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
                     HORSE
                   </th>

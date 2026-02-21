@@ -9,10 +9,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Trophy } from "lucide-react";
-import { formatMoney, pctColorClass } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { PedigreeTree } from "@/components/PedigreeTree";
-import { BiometricScanSection } from "@/components/horse/BiometricScanSection";
 import type { HorseFullData } from "@/data/mockHorses";
 
 interface OverviewTabProps {
@@ -20,14 +18,45 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ horse }: OverviewTabProps) {
+  const maxVal = Math.max(...horse.valuationOverTime.map((p) => p.value), 1);
+  const scale = maxVal >= 1_000_000 ? 1e6 : maxVal >= 1_000 ? 1e3 : 1;
+  const suffix = scale === 1e6 ? "M" : scale === 1e3 ? "K" : "";
   const chartData = horse.valuationOverTime.map((p) => ({
     ...p,
-    displayValue: p.value / 1e6,
+    displayValue: p.value / scale,
   }));
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
+        <PedigreeTree
+          tokenId={horse.id}
+          horseName={horse.name}
+          maxDepth={4}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        {[
+          { label: "AGE", value: horse.stats.age },
+          { label: "TOTAL WINS", value: String(horse.stats.totalWins) },
+          { label: "GRADE WINS", value: String(horse.stats.gradeWins) },
+          { label: "INJURIES", value: String(horse.stats.injuries) },
+          { label: "PEDIGREE", value: String(horse.stats.pedigree) },
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className="rounded-lg border border-sidebar-border/60 bg-card p-4"
+          >
+            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
+              {stat.label}
+            </p>
+            <p className="text-lg font-bold text-foreground">{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
           VALUATION OVER TIME
         </h3>
@@ -43,7 +72,7 @@ export function OverviewTab({ horse }: OverviewTabProps) {
               <YAxis
                 stroke="rgba(255,255,255,0.4)"
                 tick={{ fontSize: 11 }}
-                tickFormatter={(v) => `$${v}M`}
+                tickFormatter={(v) => `$${v}${suffix}`}
               />
               <Tooltip
                 contentStyle={{
@@ -52,7 +81,7 @@ export function OverviewTab({ horse }: OverviewTabProps) {
                   borderRadius: "6px",
                 }}
                 formatter={(value: number | undefined) =>
-                  value != null ? [formatMoney(value * 1e6), "Value"] : ["—", "Value"]
+                  value != null ? [formatMoney(value * scale), "Value"] : ["—", "Value"]
                 }
               />
               <Line
@@ -65,71 +94,6 @@ export function OverviewTab({ horse }: OverviewTabProps) {
             </LineChart>
           </ResponsiveContainer>
         </div>
-      </div>
-
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
-        <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
-          ORACLE EVENTS
-        </h3>
-        <div className="space-y-3">
-          {horse.oracleEvents.map((evt) => (
-            <div
-              key={evt.id}
-              className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
-            >
-              <div className="flex items-center gap-3">
-                {evt.icon === "trophy" && (
-                  <Trophy className="h-4 w-4 text-prestige-gold shrink-0" />
-                )}
-                <div>
-                  <p className="text-sm text-foreground">{evt.description}</p>
-                  <p className="text-[11px] text-muted-foreground font-mono">
-                    {evt.source}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <span
-                  className={`text-sm font-medium ${pctColorClass(evt.changePct)}`}
-                >
-                  {evt.changePct > 0 ? "+" : ""}
-                  {evt.changePct.toFixed(1)}%
-                </span>
-                <p className="text-[11px] text-muted-foreground">{evt.date}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        {[
-          { label: "AGE", value: horse.stats.age },
-          { label: "TOTAL WINS", value: String(horse.stats.totalWins) },
-          { label: "GRADE WINS", value: String(horse.stats.gradeWins) },
-          { label: "INJURIES", value: String(horse.stats.injuries) },
-          { label: "PEDIGREE", value: String(horse.stats.pedigree) },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-lg border border-white/10 bg-black/20 p-4"
-          >
-            <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-1">
-              {stat.label}
-            </p>
-            <p className="text-lg font-bold text-foreground">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <BiometricScanSection tokenId={horse.id} />
-
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
-        <PedigreeTree
-          tokenId={horse.id}
-          horseName={horse.name}
-          maxDepth={4}
-        />
       </div>
     </div>
   );

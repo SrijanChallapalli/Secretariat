@@ -29,7 +29,7 @@ export function HeatmapTile({ horse }: HeatmapTileProps) {
   return (
     <Link
       href={`/horse/${horse.id}`}
-      className="group relative block overflow-hidden rounded-lg border border-white/10 bg-black/20 p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-prestige-gold/30 hover:shadow-[0_0_20px_rgba(212,175,55,0.15)]"
+      className="group relative block overflow-hidden rounded-lg border border-sidebar-border/60 bg-card p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-prestige-gold/30 hover:shadow-[0_0_20px_rgba(212,175,55,0.15)]"
     >
       {/* Tint overlay: intensity scales with magnitude of change */}
       {tintStyle && (

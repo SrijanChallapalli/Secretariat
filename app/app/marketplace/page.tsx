@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { mapToMarketListing } from "@/lib/on-chain-mapping";
 import { MarketHero } from "@/components/market/MarketHero";
-import { MarketToolbar } from "@/components/market/MarketToolbar";
 import { MarketTable, type SortKey } from "@/components/market/MarketTable";
+import { MarketAnalyticsSection } from "@/components/market/MarketAnalytics";
+import { OrderBook } from "@/components/market/OrderBook";
+import { computeMarketAnalytics } from "@/lib/market-analytics";
 import type { MarketListing } from "@/data/mockMarketListings";
 import { useHorsesWithListings } from "@/lib/hooks/useHorsesWithListings";
 import type { UseHorsesResult } from "@/lib/hooks/useHorsesWithListings";
@@ -16,6 +18,8 @@ export default function MarketplacePage() {
   const [sortKey, setSortKey] = useState<SortKey>("valuationUsd");
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(0);
+  const [analytics, setAnalytics] = useState<Awaited<ReturnType<typeof computeMarketAnalytics>> | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   const { horses: horsesWithListings, isLoading, isError } = useHorsesWithListings({ withStatus: true }) as UseHorsesResult;
 
@@ -27,8 +31,40 @@ export default function MarketplacePage() {
     [horsesWithListings]
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    setAnalyticsLoading(true);
+    const input = listings.map((l) => ({
+      id: l.id,
+      name: l.name,
+      valuationUsd: l.valuationUsd,
+      soundness: l.soundness,
+      studFeeUsd: l.studFeeUsd,
+      demandScore: l.demandScore,
+    }));
+    const valuations = Object.fromEntries(listings.map((l) => [l.id, l.valuationUsd]));
+    computeMarketAnalytics(input, valuations)
+      .then((a) => {
+        if (!cancelled) setAnalytics(a);
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyticsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listings]);
+
+  const listingsWithReal24h = useMemo(() => {
+    if (!analytics?.change24hByToken) return listings;
+    return listings.map((l) => ({
+      ...l,
+      change24hPct: analytics.change24hByToken[l.id] ?? l.change24hPct,
+    }));
+  }, [listings, analytics]);
+
   const filtered = useMemo(() => {
-    let list = listings.filter((h) =>
+    let list = listingsWithReal24h.filter((h) =>
       h.name.toLowerCase().includes(search.toLowerCase())
     );
     list = [...list].sort((a, b) => {
@@ -78,23 +114,23 @@ export default function MarketplacePage() {
       return sortAsc ? diff : -diff;
     });
     return list;
-  }, [listings, search, sortKey, sortAsc]);
+  }, [listingsWithReal24h, search, sortKey, sortAsc]);
 
   const stats = useMemo(() => {
     const total = listings.reduce((a, h) => a + h.valuationUsd, 0);
-    const avg24h =
-      listings.length > 0
-        ? listings.reduce((a, h) => a + h.change24hPct, 0) / listings.length
-        : 0;
-    const topMover = [...listings].sort(
-      (a, b) => b.change24hPct - a.change24hPct
-    )[0];
+    const avg24h = analytics?.avg24hPct ?? (listings.length > 0
+      ? listingsWithReal24h.reduce((a, h) => a + h.change24hPct, 0) / listings.length
+      : 0);
+    const topMoverName = analytics?.topMover24h?.name ?? (() => {
+      const sorted = [...listingsWithReal24h].sort((a, b) => b.change24hPct - a.change24hPct);
+      return sorted[0]?.name ?? "—";
+    })();
     return {
       totalMarketCap: total,
       avg24hPct: avg24h,
-      topMoverName: topMover?.name ?? "—",
+      topMoverName,
     };
-  }, [listings]);
+  }, [listings, listingsWithReal24h, analytics]);
 
   const handleSort = (key: SortKey) => {
     setPage(0);
@@ -113,13 +149,13 @@ export default function MarketplacePage() {
   if (isLoading) {
     return (
       <div className="space-y-6 max-w-7xl mx-auto">
-        <div className="rounded-lg border border-white/10 bg-black/20 p-8 animate-pulse">
+        <div className="rounded-lg border border-sidebar-border/60 bg-card p-8 animate-pulse">
           <div className="h-6 w-48 bg-white/10 rounded mb-4" />
           <div className="h-4 w-64 bg-white/10 rounded" />
         </div>
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="rounded-lg border border-white/10 bg-black/20 p-4 animate-pulse">
+            <div key={i} className="rounded-lg border border-sidebar-border/60 bg-card p-4 animate-pulse">
               <div className="h-4 w-full bg-white/5 rounded" />
             </div>
           ))}
@@ -146,7 +182,9 @@ export default function MarketplacePage() {
         topMoverName={stats.topMoverName}
       />
 
-      <MarketToolbar
+      <MarketAnalyticsSection
+        analytics={analytics}
+        isLoading={analyticsLoading}
         count={filtered.length}
         search={search}
         onSearchChange={handleSearchChange}
@@ -159,6 +197,12 @@ export default function MarketplacePage() {
         onSort={handleSort}
       />
 
+      <OrderBook
+        horseIds={filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((l) => l.id)}
+        horseNames={Object.fromEntries(filtered.map((l) => [l.id, l.name]))}
+        isLoading={isLoading}
+      />
+
       {filtered.length > PAGE_SIZE && (
         <div className="flex items-center justify-between gap-4">
           <span className="text-xs text-muted-foreground">
@@ -169,7 +213,7 @@ export default function MarketplacePage() {
               type="button"
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="px-3 py-1.5 text-xs rounded border border-white/20 text-foreground hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 text-xs rounded border border-sidebar-border/60 text-foreground hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               ← Prev
             </button>
@@ -180,7 +224,7 @@ export default function MarketplacePage() {
               type="button"
               disabled={(page + 1) * PAGE_SIZE >= filtered.length}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 text-xs rounded border border-white/20 text-foreground hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 text-xs rounded border border-sidebar-border/60 text-foreground hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Next →
             </button>

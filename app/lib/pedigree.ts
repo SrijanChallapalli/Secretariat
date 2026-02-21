@@ -86,8 +86,9 @@ export async function buildPedigreeTree(
 
   horse.generation = currentDepth;
 
-  // Fetch sire if exists
-  if (horse.sireId > 0) {
+  // Fetch sire: token 0 is valid (e.g. Galileos Edge); only skip when both parents are 0 (founder)
+  const hasSire = horse.sireId > 0 || (horse.sireId === 0 && horse.damId > 0);
+  if (hasSire) {
     horse.sire = await buildPedigreeTree(
       horse.sireId,
       maxDepth,
@@ -97,8 +98,9 @@ export async function buildPedigreeTree(
     horse.sire = null;
   }
 
-  // Fetch dam if exists
-  if (horse.damId > 0) {
+  // Fetch dam: token 0 is valid; only skip when both parents are 0 (founder)
+  const hasDam = horse.damId > 0 || (horse.damId === 0 && horse.sireId > 0);
+  if (hasDam) {
     horse.dam = await buildPedigreeTree(
       horse.damId,
       maxDepth,

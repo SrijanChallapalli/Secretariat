@@ -4,6 +4,8 @@ import { Trophy, Crown } from "lucide-react";
 import { validateHorseName } from "../../../shared/name-validator";
 import { useState } from "react";
 
+const TRAIT_LABELS = ["SPD", "STA", "AGI", "POW", "TMP", "HLT", "INT", "HRT"];
+
 export interface BreedingPickDisplay {
   stallionTokenId: number;
   stallionName: string;
@@ -14,6 +16,8 @@ export interface BreedingPickDisplay {
   soundnessDelta: number;
   confidence: number;
   explanation: string;
+  offspringTraits?: number[];
+  predictedOffspringValue?: number;
 }
 
 interface BreedingPicksProps {
@@ -170,6 +174,41 @@ export function BreedingPicks({
                 </div>
               </div>
 
+              {pick.offspringTraits && pick.offspringTraits.length > 0 && (
+                <div className="rounded-md border border-border bg-card/80 px-3 py-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Simulated Offspring Traits
+                  </p>
+                  <div className="flex gap-1.5 items-end">
+                    {TRAIT_LABELS.map((label, i) => {
+                      const val = pick.offspringTraits![i] ?? 0;
+                      return (
+                        <div key={label} className="flex-1 text-center">
+                          <div className="relative h-10 w-full bg-white/5 rounded-sm overflow-hidden">
+                            <div
+                              className="absolute bottom-0 w-full rounded-sm bg-prestige-gold/60 transition-all"
+                              style={{ height: `${val}%` }}
+                            />
+                          </div>
+                          <p className="text-[8px] text-muted-foreground mt-0.5 leading-tight truncate">
+                            {label}
+                          </p>
+                          <p className="text-[9px] font-mono text-foreground">{val}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {pick.predictedOffspringValue != null && pick.predictedOffspringValue > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      ML predicted earnings:{" "}
+                      <span className="text-prestige-gold font-mono">
+                        ${pick.predictedOffspringValue.toLocaleString()}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+
               {pick.explanation && (
                 <div className="rounded-md border border-prestige-gold/20 bg-prestige-gold/5 px-3 py-2">
                   <p className="text-[10px] font-semibold text-prestige-gold uppercase tracking-wider mb-0.5">
@@ -196,7 +235,7 @@ export function BreedingPicks({
                       <>
                         <input
                           placeholder="Offspring name"
-                          className={`w-full px-3 py-2 rounded-md bg-secondary/60 text-sm border ${
+                          className={`w-full px-3 py-2 rounded-md bg-input text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background border ${
                             nameInvalid
                               ? "border-destructive/60"
                               : "border-border"

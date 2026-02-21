@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import { XGBoostPredictor, type HorseInput } from "./xgboost-predictor.js";
+import { generateBreedingExplanation, isOgComputeConfigured } from "./og-compute.js";
 
 interface HorseData {
   tokenId: number;
+  name?: string;
   traitVector: number[];
   pedigreeScore: number;
   injured?: boolean;
@@ -17,6 +19,7 @@ interface HorseData {
 
 interface BreedingRecommendation {
   stallionTokenId: number;
+  stallionName?: string;
   score: number;
   predictedOffspringValue: number;
   explainability: {
@@ -28,6 +31,7 @@ interface BreedingRecommendation {
     mlOffspringValue: number;
   };
   riskFlags: string[];
+  aiExplanation?: string;
 }
 
 let predictor: XGBoostPredictor | null = null;
@@ -161,6 +165,7 @@ function scoreStallions(
 
     return {
       stallionTokenId: stallion.tokenId,
+      stallionName: stallion.name || `Stallion #${stallion.tokenId}`,
       score: Math.max(0, Math.min(1, score)),
       predictedOffspringValue,
       explainability: {
@@ -181,11 +186,15 @@ function scoreStallions(
 
 /**
  * POST /breeding/recommend
- * Body: { mare, stallions, maxStudFee? }
+ * Body: { mare, stallions, maxStudFee?, explain?: boolean }
+ *
+ * When `explain` is true (or 0G Compute is configured), the top 3 picks are
+ * enriched with natural-language AI explanations generated via 0G Compute
+ * Network (qwen-2.5-7b-instruct on testnet).
  */
 export async function breedingRoute(req: Request, res: Response) {
   try {
-    const { mare, stallions, maxStudFee } = req.body ?? {};
+    const { mare, stallions, maxStudFee, explain } = req.body ?? {};
     if (!mare || !Array.isArray(stallions)) {
       res.status(400).json({ error: "mare (object) and stallions (array) required" });
       return;
@@ -195,9 +204,31 @@ export async function breedingRoute(req: Request, res: Response) {
     const maxFee = typeof maxStudFee === "number" ? maxStudFee : 10000;
     const picks = scoreStallions(mare, stallions, maxFee, xgb);
 
+    const shouldExplain = explain !== false && isOgComputeConfigured();
+
+    if (shouldExplain && picks.length > 0) {
+      const mareName = mare.name || `Mare #${mare.tokenId}`;
+      const breakdowns = picks.map((p) => ({
+        stallionName: p.stallionName ?? `Stallion #${p.stallionTokenId}`,
+        traitMatch: p.explainability.traitMatch,
+        pedigreeSynergy: p.explainability.pedigreeSynergy,
+        costPenalty: p.explainability.costPenalty,
+        formBonus: p.explainability.formBonus,
+        mlOffspringValue: p.explainability.mlOffspringValue,
+        riskFlags: p.riskFlags,
+        overallScore: p.score,
+      }));
+
+      const explanations = await generateBreedingExplanation(mareName, breakdowns);
+      for (let i = 0; i < picks.length; i++) {
+        picks[i].aiExplanation = explanations[i] || undefined;
+      }
+    }
+
     res.json({
       recommendations: picks,
       modelVersion: xgb ? `xgboost-${xgb.treeCount()}t` : "heuristic-only",
+      ogComputeEnabled: shouldExplain,
     });
   } catch (e) {
     res.status(500).json({ error: String(e) });

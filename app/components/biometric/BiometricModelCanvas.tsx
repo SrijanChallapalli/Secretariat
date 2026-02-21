@@ -11,7 +11,6 @@ import {
 import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
 import {
-  type Vector3,
   type Group,
   type Mesh,
   type MeshStandardMaterial,
@@ -81,8 +80,8 @@ function HorseModel({ wireframe }: { wireframe: boolean }) {
   const obj = useLoader(OBJWithMTLLoader, OBJ_MODEL_URL) as Group;
 
   useEffect(() => {
-    const wireframeColor = 0x00d4ff; // tech cyan
-    const solidColor = 0x0c4a6e; // dark blue
+    const wireframeColor = 0x00d4ff; // high-tech blue
+    const solidColor = 0x1a1414; // matches UI card background
     obj.traverse((child) => {
       if ("material" in child && child.material) {
         const mat = (child as Mesh).material as
@@ -94,7 +93,7 @@ function HorseModel({ wireframe }: { wireframe: boolean }) {
             mat.color.setHex(wireframe ? wireframeColor : solidColor);
           }
           const m = mat as MeshPhongMaterial & { emissive?: { setHex: (n: number) => void } };
-          if (m.emissive) m.emissive.setHex(wireframe ? 0x00d4ff : 0x0f172a);
+          if (m.emissive) m.emissive.setHex(wireframe ? 0x00d4ff : 0x1a1414);
         }
       }
     });
@@ -125,7 +124,7 @@ class HorseModelErrorBoundary extends Component<{
 }
 
 function PlaceholderHorse({ wireframe }: { wireframe: boolean }) {
-  const color = wireframe ? "#00d4ff" : "#0c4a6e";
+  const color = wireframe ? "#00d4ff" : "#1a1414";
   return (
     <group>
       {/* Body */}
@@ -189,7 +188,8 @@ function CameraController({
   const { camera } = useThree();
   const preset = CAMERA_PRESETS.find((p) => p.id === presetId);
   const targetRef = useRef({ x: 0, y: 0, z: 0 });
-  const posRef = useRef({ x: 0, y: 0, z: 0 });
+  const startRef = useRef({ x: 0, y: 0, z: 0 });
+  const progressRef = useRef(0);
   const doneRef = useRef(false);
 
   useEffect(() => {
@@ -199,21 +199,23 @@ function CameraController({
       y: preset.position[1],
       z: preset.position[2],
     };
-    posRef.current = {
+    startRef.current = {
       x: camera.position.x,
       y: camera.position.y,
       z: camera.position.z,
     };
+    progressRef.current = 0;
     doneRef.current = false;
   }, [presetId, preset, camera]);
 
   useFrame((_, delta) => {
     if (!preset || doneRef.current) return;
-    const t = Math.min(1, delta * 2.2);
-    camera.position.lerp(
-      targetRef.current as unknown as Vector3,
-      t,
-    );
+    progressRef.current = Math.min(1, progressRef.current + delta * 1.8);
+    const t = progressRef.current;
+    const eased = t * t * (3 - 2 * t);
+    camera.position.x = startRef.current.x + (targetRef.current.x - startRef.current.x) * eased;
+    camera.position.y = startRef.current.y + (targetRef.current.y - startRef.current.y) * eased;
+    camera.position.z = startRef.current.z + (targetRef.current.z - startRef.current.z) * eased;
     camera.lookAt(preset.target[0], preset.target[1], preset.target[2]);
     if (t >= 1) {
       doneRef.current = true;
@@ -258,21 +260,23 @@ function Marker({
           opacity={selected ? 1 : 0.85}
         />
       </mesh>
-      <Html
-        center
-        position={selected ? [0, 0.18, 0] : [0, 0, 0]}
-        distanceFactor={5}
-        style={{
-          pointerEvents: "none",
-          fontSize: selected ? "18px" : "16px",
-          fontWeight: selected ? 700 : 500,
-          color: selected ? color : "#94a3b8",
-          whiteSpace: "nowrap",
-          textShadow: selected ? `0 0 12px ${color}40, 0 0 24px ${color}30` : "0 0 8px rgba(0,0,0,0.8)",
-        }}
-      >
-        {SUBSYSTEM_NAMES[id]} {subsystem.score}
-      </Html>
+      {selected && (
+        <Html
+          center
+          position={[0, 0.18, 0]}
+          distanceFactor={5}
+          style={{
+            pointerEvents: "none",
+            fontSize: "18px",
+            fontWeight: 700,
+            color,
+            whiteSpace: "nowrap",
+            textShadow: `0 0 12px ${color}40, 0 0 24px ${color}30`,
+          }}
+        >
+          {SUBSYSTEM_NAMES[id]} {subsystem.score}
+        </Html>
+      )}
     </group>
   );
 }
@@ -307,11 +311,11 @@ function SceneContent(props: BiometricModelCanvasProps) {
   return (
     <>
       <ambientLight intensity={0.6} />
-      <hemisphereLight args={["#0ea5e9", "#0c4a6e", 0.7]} />
+      <hemisphereLight args={["#00d4ff", "#1a1414", 0.7]} />
       <directionalLight
         position={[5, 6, 5]}
         intensity={1.2}
-        color="#38bdf8"
+        color="#00d4ff"
         castShadow
         shadow-mapSize={[1024, 1024]}
       />
@@ -322,6 +326,7 @@ function SceneContent(props: BiometricModelCanvasProps) {
         enableDamping
         dampingFactor={0.12}
         rotateSpeed={0.5}
+        zoomSpeed={0.6}
         minDistance={2}
         maxDistance={10}
         maxPolarAngle={Math.PI / 2 + 0.2}
@@ -357,11 +362,14 @@ function SceneContent(props: BiometricModelCanvasProps) {
 
 export function BiometricModelCanvas(props: BiometricModelCanvasProps) {
   return (
-    <div className="w-full h-[28rem] rounded-lg overflow-hidden bg-[#0c1222] border border-white/10">
+    <div className="w-full flex-1 min-h-[260px] overflow-hidden bg-card relative">
       <Canvas
-        camera={{ position: [3.5, 0.5, 2.8], fov: 42 }}
-        gl={{ antialias: true, alpha: false }}
-        onCreated={({ gl }) => gl.setClearColor("#0c1222")}
+        camera={{ position: [4.0, 0.5, 3.2], fov: 42 }}
+        gl={{ antialias: true, alpha: true, premultipliedAlpha: false }}
+        onCreated={({ gl }) => {
+          gl.setClearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+        }}
       >
         <Suspense
           fallback={

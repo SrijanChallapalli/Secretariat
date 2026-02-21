@@ -60,7 +60,7 @@ export function ModelCard({
   };
 
   return (
-    <div className="rounded-sm border border-white/10 bg-black/20 backdrop-blur-sm p-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+    <div className="rounded-sm border border-sidebar-border/60 bg-card backdrop-blur-sm p-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
       <p className="text-[10px] font-sans tracking-[0.25em] text-prestige-gold-muted uppercase mb-6">
         Model Card
       </p>

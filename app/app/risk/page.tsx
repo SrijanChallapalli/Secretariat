@@ -6,9 +6,6 @@ import { addresses, abis } from "@/lib/contracts";
 import { formatEther, parseEther } from "viem";
 import {
   ShieldAlert,
-  Activity,
-  Heart,
-  TrendingDown,
   Gauge,
   AlertTriangle,
 } from "lucide-react";
@@ -74,28 +71,6 @@ export default function RiskBoardPage() {
         : undefined,
   });
 
-  // Biometric readings
-  const { data: strideBiometric } = useReadContract({
-    address: addresses.horseOracle,
-    abi: abis.HorseOracle,
-    functionName: "getLatestBiometric",
-    args: [BigInt(horseId || 0), 0],
-  });
-
-  const { data: heartBiometric } = useReadContract({
-    address: addresses.horseOracle,
-    abi: abis.HorseOracle,
-    functionName: "getLatestBiometric",
-    args: [BigInt(horseId || 0), 1],
-  });
-
-  const { data: gaitBiometric } = useReadContract({
-    address: addresses.horseOracle,
-    abi: abis.HorseOracle,
-    functionName: "getLatestBiometric",
-    args: [BigInt(horseId || 0), 2],
-  });
-
   const { writeContract } = useWriteContract();
 
   const params = riskParams as any;
@@ -122,20 +97,6 @@ export default function RiskBoardPage() {
     });
   }
 
-  function formatBiometric(data: any) {
-    if (!data || !data.timestamp || data.timestamp === 0n)
-      return { value: "—", deviation: "—", time: "—" };
-    return {
-      value: String(data.value),
-      deviation: `${Number(data.deviationBps) / 100}%`,
-      time: new Date(Number(data.timestamp) * 1000).toLocaleTimeString(),
-    };
-  }
-
-  const stride = formatBiometric(strideBiometric);
-  const heart = formatBiometric(heartBiometric);
-  const gait = formatBiometric(gaitBiometric);
-
   return (
     <div className="space-y-6 max-w-4xl">
       <header className="space-y-2">
@@ -159,7 +120,7 @@ export default function RiskBoardPage() {
           <input
             type="number"
             min={0}
-            className="w-28 px-3 py-2 rounded-sm bg-secondary border border-border text-sm font-mono"
+            className="w-28 px-3 py-2 rounded-sm bg-input border border-border text-foreground text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             value={horseId}
             onChange={(e) => setHorseId(e.target.value)}
             placeholder="Token ID"
@@ -257,42 +218,6 @@ export default function RiskBoardPage() {
         </section>
       )}
 
-      {/* Biometric feeds */}
-      <section className="rounded-sm border border-border bg-card p-4 space-y-3">
-        <h2 className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-          <Activity className="h-3 w-3" /> Live Biometric Feed
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="rounded-sm bg-secondary/50 p-3 space-y-1">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Activity className="h-3 w-3" /> Stride Length
-            </p>
-            <p className="font-mono text-lg">{stride.value}</p>
-            <p className="text-xs text-muted-foreground">
-              Deviation: {stride.deviation} · {stride.time}
-            </p>
-          </div>
-          <div className="rounded-sm bg-secondary/50 p-3 space-y-1">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Heart className="h-3 w-3" /> Heart Rate
-            </p>
-            <p className="font-mono text-lg">{heart.value}</p>
-            <p className="text-xs text-muted-foreground">
-              Deviation: {heart.deviation} · {heart.time}
-            </p>
-          </div>
-          <div className="rounded-sm bg-secondary/50 p-3 space-y-1">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <TrendingDown className="h-3 w-3" /> Gait Symmetry
-            </p>
-            <p className="font-mono text-lg">{gait.value}</p>
-            <p className="text-xs text-muted-foreground">
-              Deviation: {gait.deviation} · {gait.time}
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* Risk parameter sliders / configurator */}
       {address && vault && (
         <section className="rounded-sm border border-border bg-card p-4 space-y-4">
@@ -307,7 +232,7 @@ export default function RiskBoardPage() {
               </label>
               <input
                 type="number"
-                className="w-full px-3 py-2 rounded-sm bg-secondary border border-border text-sm font-mono"
+                className="w-full px-3 py-2 rounded-sm bg-input border border-border text-foreground text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                 value={minValuation}
                 onChange={(e) => setMinValuation(e.target.value)}
               />

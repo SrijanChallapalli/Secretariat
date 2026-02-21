@@ -10,6 +10,7 @@ export interface PortfolioHolding {
   value: bigint;
   pnlPct: number;
   claimable: bigint;
+  isOwnerOnly: boolean;
 }
 
 export interface PortfolioKPIs {

@@ -13,8 +13,8 @@ export interface CameraPreset {
 /** Model center for camera targeting (horse body center) */
 const CENTER: [number, number, number] = [0, 0.5, 0.05];
 
-/** Camera distance - zoomed out for clearer view */
-const DIST = 4;
+/** Camera distance - zoomed out so horse fits within frame */
+const DIST = 4.5;
 
 export const CAMERA_PRESETS: CameraPreset[] = [
   {
@@ -50,7 +50,7 @@ export const CAMERA_PRESETS: CameraPreset[] = [
   {
     id: "side",
     label: "Side",
-    position: [3.5, 0.5, 2.8],
+    position: [4.0, 0.5, 3.2],
     target: CENTER,
   },
 ];

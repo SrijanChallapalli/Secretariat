@@ -19,7 +19,7 @@ export function OwnershipTab({ horse }: OwnershipTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
           VAULT
         </h3>
@@ -81,7 +81,7 @@ export function OwnershipTab({ horse }: OwnershipTabProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
           TRADE FLOW
         </h3>
@@ -113,7 +113,7 @@ export function OwnershipTab({ horse }: OwnershipTabProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
           TRANSACTIONS
         </h3>

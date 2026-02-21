@@ -14,6 +14,8 @@ import { addresses, abis } from "@/lib/contracts";
 import { useState, useMemo, useEffect } from "react";
 import {
   scoreStallions,
+  fetchServerRecommendations,
+  expectedOffspringTraits,
   type HorseTraits,
   type Recommendation,
 } from "@/lib/breeding-advisor";
@@ -115,7 +117,8 @@ async function parseOffspringIdFromReceipt(
 function mapRecommendationToDisplay(
   rec: Recommendation,
   stallions: HorseTraits[],
-  rank: 1 | 2 | 3
+  rank: 1 | 2 | 3,
+  mareTraits?: number[],
 ): BreedingPickDisplay {
   const stallion = stallions.find((s) => s.tokenId === rec.stallionTokenId);
   const name = stallion?.name
@@ -123,16 +126,27 @@ function mapRecommendationToDisplay(
     : `Stallion #${rec.stallionTokenId}`;
 
   const { traitMatch, pedigreeSynergy, inbreedingRisk } = rec.explainability;
-  const reasons: string[] = [];
-  if (pedigreeSynergy >= 0.7) reasons.push("pedigree synergy");
-  if (traitMatch >= 0.6) reasons.push("strong trait match");
-  if (inbreedingRisk < 0.1) reasons.push("low inbreeding risk");
-  if (reasons.length === 0) reasons.push("viable pairing");
-  const whyPrefix = rank === 1 ? "Top pick: " : "";
-  const explanation =
-    rec.riskFlags.length === 0
-      ? `${whyPrefix}${reasons.join(" + ")}.`
-      : `${whyPrefix}${reasons.join(" + ")}. Consider: ${rec.riskFlags.join(", ")}.`;
+
+  let explanation: string;
+  if (rec.aiExplanation) {
+    explanation = rec.aiExplanation;
+  } else {
+    const reasons: string[] = [];
+    if (pedigreeSynergy >= 0.7) reasons.push("pedigree synergy");
+    if (traitMatch >= 0.6) reasons.push("strong trait match");
+    if (inbreedingRisk < 0.1) reasons.push("low inbreeding risk");
+    if (reasons.length === 0) reasons.push("viable pairing");
+    const whyPrefix = rank === 1 ? "Top pick: " : "";
+    explanation =
+      rec.riskFlags.length === 0
+        ? `${whyPrefix}${reasons.join(" + ")}.`
+        : `${whyPrefix}${reasons.join(" + ")}. Consider: ${rec.riskFlags.join(", ")}.`;
+  }
+
+  const offspringTraits =
+    stallion && mareTraits && stallion.traitVector.length > 0 && mareTraits.length > 0
+      ? expectedOffspringTraits(stallion.traitVector, mareTraits)
+      : undefined;
 
   return {
     stallionTokenId: rec.stallionTokenId,
@@ -147,6 +161,8 @@ function mapRecommendationToDisplay(
     soundnessDelta: stallion?.injured ? -2 : 0,
     confidence: Math.round(rec.score * 100),
     explanation,
+    offspringTraits,
+    predictedOffspringValue: rec.predictedOffspringValue,
   };
 }
 
@@ -186,6 +202,7 @@ export default function BreedPage() {
     getInitialMareId(mareParam, stallionParam)
   );
   const [picks, setPicks] = useState<Recommendation[] | null>(null);
+  const [picksLoading, setPicksLoading] = useState(false);
   const [selectedStallionId, setSelectedStallionId] = useState<number | null>(null);
   const [directBreedName, setDirectBreedName] = useState("");
   const [timelineStep, setTimelineStep] = useState<TimelineStepId>("approve_adi");
@@ -209,11 +226,9 @@ export default function BreedPage() {
 
   // Auto-fetch picks when mare is pre-selected from URL
   useEffect(() => {
-    if (!mare || stallions.length === 0 || picks !== null) return;
-    const maxFee = 1000n * BigInt(1e18);
-    setPicks(scoreStallions(mare, stallions, maxFee));
-    setTimelineStep("sign_eip712");
-  }, [mare, stallions, picks]);
+    if (!mare || stallions.length === 0 || picks !== null || picksLoading) return;
+    fetchPicks(mare, stallions);
+  }, [mare, stallions, picks, picksLoading]);
 
   // Pre-select stallion when coming from stallion page and it appears in picks
   useEffect(() => {
@@ -239,15 +254,32 @@ export default function BreedPage() {
   const breedingPicksDisplay: BreedingPickDisplay[] = useMemo(() => {
     if (!picks || picks.length === 0) return [];
     return picks.slice(0, 3).map((p, idx) =>
-      mapRecommendationToDisplay(p, stallions, (idx + 1) as 1 | 2 | 3)
+      mapRecommendationToDisplay(p, stallions, (idx + 1) as 1 | 2 | 3, mare?.traitVector)
     );
-  }, [picks, stallions]);
+  }, [picks, stallions, mare?.traitVector]);
+
+  async function fetchPicks(m: HorseTraits, s: HorseTraits[]) {
+    const maxFee = 1000n * BigInt(1e18);
+    setPicksLoading(true);
+    try {
+      const { recommendations } = await fetchServerRecommendations(m, s, maxFee);
+      if (recommendations.length > 0) {
+        setPicks(recommendations);
+        setTimelineStep("sign_eip712");
+        setPicksLoading(false);
+        return;
+      }
+    } catch {
+      // server unavailable — fall back to client scoring
+    }
+    setPicks(scoreStallions(m, s, maxFee));
+    setTimelineStep("sign_eip712");
+    setPicksLoading(false);
+  }
 
   const getRecommendations = () => {
     if (!mare) return;
-    const maxFee = 1000n * BigInt(1e18);
-    setPicks(scoreStallions(mare, stallions, maxFee));
-    setTimelineStep("sign_eip712");
+    fetchPicks(mare, stallions);
   };
 
   const queryClient = useQueryClient();
@@ -554,7 +586,8 @@ export default function BreedPage() {
                 <input
                   type="number"
                   min={0}
-                  className="w-24 px-3 py-2 rounded-md bg-secondary border border-border text-sm"
+                  autoComplete="off"
+                  className="w-24 px-3 py-2 rounded-md bg-input border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                   value={mareId}
                   onChange={(e) => {
                     setMareId(e.target.value);
@@ -562,16 +595,6 @@ export default function BreedPage() {
                   }}
                 />
               </div>
-
-              {mare && (
-                <div className="rounded-md border border-border bg-card p-4">
-                  <PedigreeTree
-                    tokenId={mare.tokenId}
-                    horseName={mare.name}
-                    maxDepth={4}
-                  />
-                </div>
-              )}
             </div>
 
             <div className="space-y-4">
@@ -625,7 +648,7 @@ export default function BreedPage() {
                     <div className="space-y-2">
                       <input
                         placeholder="Offspring name"
-                        className={`w-full px-3 py-2 rounded-md bg-secondary text-sm border ${
+                        className={`w-full px-3 py-2 rounded-md bg-input text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background border ${
                           nameValidation && !nameValidation.valid
                             ? "border-destructive/60"
                             : "border-border"
@@ -658,6 +681,16 @@ export default function BreedPage() {
               )}
             </div>
           </section>
+
+          {mare && (
+            <section className="rounded-md border border-border bg-card p-4">
+              <PedigreeTree
+                tokenId={mare.tokenId}
+                horseName={mare.name}
+                maxDepth={3}
+              />
+            </section>
+          )}
 
           <ExecutionTimeline currentStepId={timelineStep} />
         </>

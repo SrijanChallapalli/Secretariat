@@ -1,6 +1,6 @@
 # Secretariat — Decentralized Thoroughbred RWA Marketplace
 
-One codebase, dual deployment: **0G Galileo Testnet** (demo) and **ADI AB Testnet** (institutional). Tokenize horses, fractional ownership, breeding rights market, and an on-chain Breeding Advisor agent (ERC-7857-style iNFT) with 0G Storage model bundle.
+One codebase, dual deployment: **0G Galileo Testnet** (demo) and **ADI AB Testnet** (institutional). Tokenize horses, fractional ownership, breeding rights market, and an on-chain Breeding Advisor agent (ERC-7857-style iNFT) with 0G Storage model bundle and 0G Compute inference.
 
 ## Quickstart
 
@@ -64,8 +64,10 @@ Install Foundry: `curl -L https://foundry.paradigm.xyz | bash && foundryup`
 
 ## Built with
 
+- [0G Chain](https://0g.network) — EVM L1 for AI agents and DeFi
 - [0G Storage](https://0g.network) — Decentralized storage for agent model bundles
-- [ADI Chain](https://adifoundation.ai) — Institutional-grade EVM network
+- [0G Compute](https://docs.0g.ai/concepts/compute) — Decentralized AI inference (qwen-2.5-7b-instruct)
+- [ADI Chain](https://adifoundation.ai) — Institutional-grade EVM network with compliance features
 - [WalletConnect](https://walletconnect.com) — Multi-chain wallet connection
 - [RainbowKit](https://rainbowkit.com) — Wallet connection UI
 
@@ -131,6 +133,14 @@ All variables are defined in [`.env.example`](.env.example). Copy it to `.env` v
 | `INDEXER_RPC` | `https://indexer-storage-testnet-turbo.0g.ai` | 0G indexer endpoint |
 | `RPC_URL_0G` | `https://evmrpc-testnet.0g.ai` | 0G RPC for storage SDK |
 
+### 0G Compute (AI Inference)
+
+| Variable | Default | Description |
+|---|---|---|
+| `OG_COMPUTE_PROVIDER_URL` | — | 0G Compute provider service URL |
+| `OG_COMPUTE_SECRET` | — | Bearer token (`app-sk-...`) from `0g-compute-cli` |
+| `OG_COMPUTE_MODEL` | `qwen-2.5-7b-instruct` | Model for AI explanations |
+
 ### Contract addresses
 
 Auto-filled by `npm run env:from-broadcast` after deploy. Leave empty until then.
@@ -165,14 +175,20 @@ MetaMask: add both networks; switch via RainbowKit/header ("0G Demo" / "ADI Inst
 - **BreedingAdvisorINFT** — Agent iNFT with profile (name, version, specialization, modelBundleRootHash). Token 0: Breeding Advisor. Horse Valuation Agent is off-chain (see `app/lib/horse-valuation-agent.ts`, `server/bundle/valuation-agent/`); when oracle reports race/injury/news, call `POST /valuation/calculate` for agent-suggested USD value.
 - **AgentExecutor** — EIP-712 BreedingPlan; execute(plan, offspringName, salt, purchaseSeed, signature) enforces budget/rights and calls marketplace.
 
-## 0G Storage
+## 0G Integration
 
+### Storage
 - **Upload:** App or server builds a model bundle (dataset.json, weights.json, model_card.md, evaluation.json, agent_code.ts or valuation_agent_code.ts) >=10MB (pad if needed), POST to `/og/upload` -> returns `rootHash`, `txHash`. Store `rootHash` in agent iNFT (mint or updateModelBundle). Bundles: `server/bundle/` (Breeding Advisor), `server/bundle/valuation-agent/` (Horse Valuation Agent).
 - **Download:** GET `/og/download/:rootHash` streams file. "Refresh from 0G" in UI uses this to show bundle version/contents.
 
+### Compute (AI Inference)
+- **Breeding explanations:** When `OG_COMPUTE_PROVIDER_URL` and `OG_COMPUTE_SECRET` are set, `POST /breeding/recommend` calls 0G Compute Network (`qwen-2.5-7b-instruct`) to generate natural-language AI explanations for each of the top 3 breeding picks.
+- **API:** OpenAI-compatible `/v1/proxy/chat/completions` via the `openai` SDK. Graceful fallback: if 0G Compute is unavailable, recommendations still work with XGBoost scores only.
+- **Setup:** See [0G Compute docs](https://docs.0g.ai/developer-hub/building-on-0g/compute-network/inference) for provider setup and token generation.
+
 ## Agent guardrails
 
-- **Recommend-only (default):** UI runs scoring locally; shows Top 3 + explainability; no on-chain execution. Breeding Advisor uses `/breed?advisor=1`.
+- **Recommend-only (default):** UI fetches server-side XGBoost + 0G Compute recommendations; falls back to client-side scoring. Shows Top 3 + explainability + offspring simulation.
 - **Execute with approval:** User signs EIP-712 BreedingPlan (budget, maxStudFee, mare, chosenStallion, deadline, traitFloor). AgentExecutor checks signature and constraints, then purchaseBreedingRight (if needed) + breed.
 
 ## 5-minute judge demo script

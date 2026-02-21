@@ -27,7 +27,7 @@ export function MarketHeatmap({ horses }: MarketHeatmapProps) {
               type="button"
               disabled={page === 0}
               onClick={() => setPage((p) => p - 1)}
-              className="px-2 py-1 text-[10px] rounded border border-white/20 text-muted-foreground hover:bg-white/10 transition-colors disabled:opacity-30"
+              className="px-2 py-1 text-[10px] rounded border border-sidebar-border/60 text-muted-foreground hover:bg-white/5 transition-colors disabled:opacity-30"
             >
               ←
             </button>
@@ -38,14 +38,14 @@ export function MarketHeatmap({ horses }: MarketHeatmapProps) {
               type="button"
               disabled={page >= totalPages - 1}
               onClick={() => setPage((p) => p + 1)}
-              className="px-2 py-1 text-[10px] rounded border border-white/20 text-muted-foreground hover:bg-white/10 transition-colors disabled:opacity-30"
+              className="px-2 py-1 text-[10px] rounded border border-sidebar-border/60 text-muted-foreground hover:bg-white/5 transition-colors disabled:opacity-30"
             >
               →
             </button>
           </div>
         )}
       </div>
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {visible.map((horse) => (
           <HeatmapTile key={horse.id} horse={horse} />
         ))}

@@ -10,7 +10,7 @@ const BiometricModelCanvas = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-[28rem] rounded-lg bg-white/5 animate-pulse" />
+      <div className="w-full min-h-[260px] flex-1 bg-card animate-pulse" />
     ),
   },
 );
@@ -41,9 +41,9 @@ export function BiometricModelViewer({
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex-1 min-h-0 flex flex-col w-full relative">
       {!canvasLoaded && (
-        <div className="w-full h-[28rem] rounded-lg bg-white/5 animate-pulse" />
+        <div className="absolute inset-0 bg-white/5 animate-pulse z-10" />
       )}
       <BiometricModelCanvas
         scan={scan}

@@ -54,7 +54,7 @@ function SubsystemCard({
       onClick={onClick}
       onKeyDown={(e) => e.key === "Enter" && onClick?.()}
       className={`rounded-lg border p-3 cursor-pointer transition-all ${SUBSYSTEM_BG[sub.id]} ${
-        selected ? "ring-2 ring-white/50 ring-offset-2 ring-offset-[#0c1222]" : "hover:border-white/30"
+        selected ? "ring-2 ring-white/50 ring-offset-2 ring-offset-card" : "hover:border-white/30"
       }`}
     >
       <div className="flex items-center justify-between mb-2">
@@ -128,7 +128,7 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5 animate-pulse">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 animate-pulse">
         <div className="h-4 w-48 rounded bg-white/10 mb-4" />
         <div className="h-32 rounded bg-white/5" />
       </div>
@@ -137,7 +137,7 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
 
   if (error || !scan) {
     return (
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-2">
           BIOMETRIC SCAN
         </h3>
@@ -149,67 +149,63 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
   }
 
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-5 space-y-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase">
-          BIOMETRIC SCAN
-        </h3>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {scan.engineVersion}
-        </span>
-      </div>
-
-      {/* Overall score */}
-      <div className="flex items-center gap-4">
-        <div className="relative w-16 h-16 flex-shrink-0">
-          <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-            <circle
-              cx="18"
-              cy="18"
-              r="15.9"
-              fill="none"
-              stroke="rgba(255,255,255,0.1)"
-              strokeWidth="2.5"
-            />
-            <circle
-              cx="18"
-              cy="18"
-              r="15.9"
-              fill="none"
-              stroke={
-                scan.overall.label === "EXCEPTIONAL"
-                  ? "#34d399"
-                  : scan.overall.label === "STRONG"
-                    ? "#38bdf8"
-                    : scan.overall.label === "AVERAGE"
-                      ? "#fbbf24"
-                      : "#f87171"
-              }
-              strokeWidth="2.5"
-              strokeDasharray={`${scan.overall.score} ${100 - scan.overall.score}`}
-              strokeLinecap="round"
-            />
-          </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-foreground">
-            {scan.overall.score}
+    <div className="rounded-lg border border-sidebar-border/60 bg-card overflow-hidden">
+      {/* 3D viewer + score overlay | subsystems to the side */}
+      <div className="flex flex-col lg:flex-row min-h-0">
+        <div className="flex-1 min-w-0 min-h-[260px] lg:min-h-[320px] flex flex-col relative">
+          {/* Title + score pill - stacked top-left over the 3D viewer */}
+          <div className="absolute top-3 left-3 z-20 flex flex-col gap-2">
+            <h3 className="text-sm font-semibold tracking-[0.2em] text-prestige-gold uppercase">
+              BIOMETRIC SCAN
+            </h3>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/95 backdrop-blur-sm border border-white/10">
+              <div className="relative w-10 h-10 flex-shrink-0">
+                <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15.9"
+                    fill="none"
+                    stroke="rgba(255,255,255,0.1)"
+                    strokeWidth="2.5"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15.9"
+                    fill="none"
+                    stroke={
+                      scan.overall.label === "EXCEPTIONAL"
+                        ? "#34d399"
+                        : scan.overall.label === "STRONG"
+                          ? "#38bdf8"
+                          : scan.overall.label === "AVERAGE"
+                            ? "#fbbf24"
+                            : "#f87171"
+                    }
+                    strokeWidth="2.5"
+                    strokeDasharray={`${scan.overall.score} ${100 - scan.overall.score}`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-foreground">
+                  {scan.overall.score}
+                </span>
+              </div>
+              <div>
+                <p className={`text-xs font-bold ${LABEL_COLORS[scan.overall.label]}`}>
+                  {scan.overall.label}
+                </p>
+                <p className="text-[9px] text-muted-foreground">
+                  {Math.round(scan.overall.confidence * 100)}% &middot; {(scan.overall.valuationMultiplierBps / 100).toFixed(1)}% val
+                </p>
+              </div>
+            </div>
+          </div>
+          {/* Engine version - top right */}
+          <span className="absolute top-3 right-3 z-20 text-[9px] font-mono text-muted-foreground/80">
+            {scan.engineVersion}
           </span>
-        </div>
-        <div>
-          <p className={`text-lg font-bold ${LABEL_COLORS[scan.overall.label]}`}>
-            {scan.overall.label}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            Confidence {Math.round(scan.overall.confidence * 100)}%
-            &middot; Valuation modifier{" "}
-            {scan.overall.valuationMultiplierBps > 0 ? "+" : ""}
-            {(scan.overall.valuationMultiplierBps / 100).toFixed(1)}%
-          </p>
-        </div>
-      </div>
-
-      {/* 3D viewer | subsystem cards */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 min-w-0">
           <BiometricModelViewer
             scan={scan}
             tokenId={tokenId}
@@ -221,7 +217,7 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
             }}
           />
         </div>
-        <div className="lg:w-72 flex-shrink-0 space-y-2">
+        <div className="lg:w-64 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-white/5 p-3 space-y-2 overflow-y-auto max-h-[220px] lg:max-h-none">
           <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase mb-2">
             Subsystems
           </p>
@@ -241,7 +237,7 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
 
       {/* Notes */}
       {scan.notes?.length ? (
-        <div className="space-y-1 pt-2 border-t border-white/5">
+        <div className="space-y-1 p-3 pt-2 border-t border-white/5">
           {scan.notes.map((note, i) => (
             <p
               key={i}

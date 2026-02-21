@@ -26,6 +26,10 @@ const schema = z
     ORACLE_PRIVATE_KEY: z.string().optional().default(""),
     OG_UPLOADER_PRIVATE_KEY: z.string().optional().default(""),
 
+    OG_COMPUTE_PROVIDER_URL: z.string().optional().default(""),
+    OG_COMPUTE_SECRET: z.string().optional().default(""),
+    OG_COMPUTE_MODEL: z.string().optional().default("qwen-2.5-7b-instruct"),
+
     NEXT_PUBLIC_HORSE_INFT: hex40,
     NEXT_PUBLIC_HORSE_ORACLE: hex40,
     NEXT_PUBLIC_SERVER_URL: z.string().url().optional().default("http://localhost:4000"),

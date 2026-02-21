@@ -1,7 +1,5 @@
 "use client";
 
-import { useWriteContract } from "wagmi";
-import { addresses, abis } from "@/lib/contracts";
 import { useState } from "react";
 
 const SERVER_URL =
@@ -29,16 +27,6 @@ interface PipelineResult {
 
 export default function AdminPage() {
   const [horseId, setHorseId] = useState("0");
-
-  // --- Direct oracle state ---
-  const [placing, setPlacing] = useState("1");
-  const [earnings, setEarnings] = useState("100");
-  const [severity, setSeverity] = useState("500");
-  const [sentiment, setSentiment] = useState("200");
-
-  const { writeContract: reportRace } = useWriteContract();
-  const { writeContract: reportInjury } = useWriteContract();
-  const { writeContract: reportNews } = useWriteContract();
 
   // --- Pipeline state ---
   const [pipeType, setPipeType] = useState<EventType>("RACE_RESULT");
@@ -162,96 +150,7 @@ export default function AdminPage() {
         />
       </div>
 
-      {/* ============================================================ */}
-      {/* SECTION 1: Direct on-chain oracle buttons (existing)          */}
-      {/* ============================================================ */}
-      <section className="space-y-4 border border-border rounded-md p-4">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          Direct On-Chain Oracle
-        </h2>
-
-        <div className="space-y-1">
-          <label className={labelCls}>Race: placing (1-3)</label>
-          <input
-            type="number"
-            min={1}
-            max={3}
-            className={inputCls}
-            value={placing}
-            onChange={(e) => setPlacing(e.target.value)}
-          />
-          <label className={`${labelCls} mt-1`}>Earnings ADI (wei)</label>
-          <input
-            type="text"
-            className={inputCls}
-            value={earnings}
-            onChange={(e) => setEarnings(e.target.value)}
-          />
-          <button
-            className="mt-2 px-4 py-2 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            onClick={() =>
-              reportRace({
-                address: addresses.horseOracle,
-                abi: abis.HorseOracle,
-                functionName: "reportRaceResult",
-                args: [BigInt(horseId), Number(placing), BigInt(earnings)],
-              })
-            }
-          >
-            Report race result
-          </button>
-        </div>
-
-        <div className="space-y-1">
-          <label className={labelCls}>Injury: severity (bps 0-5000)</label>
-          <input
-            type="text"
-            className={inputCls}
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value)}
-          />
-          <button
-            className="mt-2 px-4 py-2 rounded-sm bg-destructive/20 text-destructive border border-destructive/60 text-sm hover:bg-destructive/30 transition-colors"
-            onClick={() =>
-              reportInjury({
-                address: addresses.horseOracle,
-                abi: abis.HorseOracle,
-                functionName: "reportInjury",
-                args: [BigInt(horseId), Number(severity)],
-              })
-            }
-          >
-            Report injury
-          </button>
-        </div>
-
-        <div className="space-y-1">
-          <label className={labelCls}>News: sentiment (bps)</label>
-          <input
-            type="text"
-            className={inputCls}
-            value={sentiment}
-            onChange={(e) => setSentiment(e.target.value)}
-          />
-          <button
-            className="mt-2 px-4 py-2 rounded-sm bg-secondary text-foreground text-sm hover:bg-secondary/80 transition-colors"
-            onClick={() =>
-              reportNews({
-                address: addresses.horseOracle,
-                abi: abis.HorseOracle,
-                functionName: "reportNews",
-                args: [BigInt(horseId), Number(sentiment)],
-              })
-            }
-          >
-            Report news
-          </button>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* SECTION 2: Pipeline — Simulate + Revalue (Agent)              */}
-      {/* ============================================================ */}
+      {/* Simulate + Revalue (Agent) */}
       <section className="space-y-4 border border-primary/40 rounded-md p-4">
         <h2 className="text-sm font-semibold text-primary uppercase tracking-wider">
           Simulate + Revalue (Agent)
@@ -409,7 +308,7 @@ export default function AdminPage() {
           onClick={runPipeline}
           disabled={pipeLoading}
         >
-          {pipeLoading ? "Processing..." : "Simulate + Revalue (Server Oracle)"}
+          {pipeLoading ? "Processing..." : "Simulate + Revalue (Agent)"}
         </button>
 
         {/* Error */}

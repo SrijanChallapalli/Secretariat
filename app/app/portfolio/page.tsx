@@ -20,6 +20,7 @@ import { parseRawHorseData } from "@/lib/on-chain-mapping";
 const vaultAbi = parseAbi([
   "function claimableFor(address) view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
+  "function totalShares() view returns (uint256)",
   "function claim() external",
 ]);
 
@@ -202,18 +203,22 @@ export default function PortfolioPage() {
       .filter(Boolean) as { horseId: number; address: `0x${string}` }[]) ?? [];
 
   const horseNames: Record<number, string> = {};
+  const horseValuations: Record<number, bigint> = {};
   allHorseData?.forEach((res, i) => {
     if (res?.status === "success" && res.result) {
       const raw = parseRawHorseData(res.result);
       horseNames[i] = raw?.name?.trim() || `Horse #${i}`;
+      if (raw) horseValuations[i] = raw.valuationADI;
     }
   });
   if (fallbackOwnedMintedId != null && fallbackData?.[0]?.status === "success" && fallbackData[0].result) {
     const raw = parseRawHorseData(fallbackData[0].result);
     horseNames[fallbackOwnedMintedId] = raw?.name?.trim() || `Horse #${fallbackOwnedMintedId}`;
+    if (raw) horseValuations[fallbackOwnedMintedId] = raw.valuationADI;
   }
 
-  const claimableCalls =
+  const VAULT_CALLS_PER = 3;
+  const vaultDetailCalls =
     address && vaults.length > 0
       ? vaults.flatMap((v) => [
           {
@@ -228,18 +233,24 @@ export default function PortfolioPage() {
             functionName: "balanceOf" as const,
             args: [address],
           },
+          {
+            address: v.address,
+            abi: vaultAbi,
+            functionName: "totalShares" as const,
+          },
         ])
       : [];
 
   const { data: vaultPositions } = useReadContracts({
-    contracts: claimableCalls as any,
+    contracts: vaultDetailCalls as any,
   });
 
   const revenueRows =
-    vaults.length && vaultPositions?.length === vaults.length * 2
+    vaults.length && vaultPositions?.length === vaults.length * VAULT_CALLS_PER
       ? vaults.map((v, idx) => {
-          const claimableRes = vaultPositions[idx * 2];
-          const balanceRes = vaultPositions[idx * 2 + 1];
+          const claimableRes = vaultPositions[idx * VAULT_CALLS_PER];
+          const balanceRes = vaultPositions[idx * VAULT_CALLS_PER + 1];
+          const totalSharesRes = vaultPositions[idx * VAULT_CALLS_PER + 2];
           const claimable =
             claimableRes?.status === "success"
               ? (claimableRes.result as bigint)
@@ -248,35 +259,49 @@ export default function PortfolioPage() {
             balanceRes?.status === "success"
               ? (balanceRes.result as bigint)
               : 0n;
+          const totalShares =
+            totalSharesRes?.status === "success"
+              ? (totalSharesRes.result as bigint)
+              : 10000n;
           return {
             horseId: v.horseId,
             claimable,
             balance,
+            totalShares,
           };
         })
       : [];
 
-  const vaultHoldings: PortfolioHolding[] = revenueRows.map((r) => ({
-    asset: horseNames[r.horseId] ?? `Horse #${r.horseId}`,
-    horseId: r.horseId,
-    shares: r.balance,
-    totalShares: 10000n,
-    value: r.claimable * 2n,
-    pnlPct: 0,
-    claimable: r.claimable,
-  }));
+  const vaultHoldings: PortfolioHolding[] = revenueRows.map((r) => {
+    const valuation = horseValuations[r.horseId] ?? 0n;
+    const proportionalValue = r.totalShares > 0n
+      ? (valuation * r.balance) / r.totalShares
+      : 0n;
+    return {
+      asset: horseNames[r.horseId] ?? `Horse #${r.horseId}`,
+      horseId: r.horseId,
+      shares: r.balance,
+      totalShares: r.totalShares,
+      value: proportionalValue,
+      pnlPct: 0,
+      claimable: r.claimable,
+      isOwnerOnly: false,
+    };
+  });
 
+  const DEFAULT_TOTAL_SHARES = 10000n;
   const vaultHorseIds = new Set(vaultHoldings.map((h) => h.horseId));
   const ownedOnlyHoldings: PortfolioHolding[] = myHorsesWithFallback
     .filter((id) => !vaultHorseIds.has(id))
     .map((id) => ({
       asset: horseNames[id] ?? `Horse #${id}`,
       horseId: id,
-      shares: 0n,
-      totalShares: 0n,
-      value: 0n,
+      shares: DEFAULT_TOTAL_SHARES,
+      totalShares: DEFAULT_TOTAL_SHARES,
+      value: horseValuations[id] ?? 0n,
       pnlPct: 0,
       claimable: 0n,
+      isOwnerOnly: true,
     }));
 
   const holdings: PortfolioHolding[] = [...ownedOnlyHoldings, ...vaultHoldings];
@@ -286,9 +311,10 @@ export default function PortfolioPage() {
     0n,
   );
 
+  const totalPortfolioValue = holdings.reduce((acc, h) => acc + h.value, 0n);
+
   const kpis: PortfolioKPIs = {
-    // totalValue is 2x total claimable (in ADI) converted for display
-    totalValue: Number(totalClaimable * 2n) / 1e18,
+    totalValue: Number(totalPortfolioValue) / 1e18,
     totalValueDeltaPct: 0,
     claimableRevenue: Number(totalClaimable) / 1e18,
     activeRights: vaults.length,
@@ -361,7 +387,7 @@ export default function PortfolioPage() {
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-lg border border-white/10 bg-black/20 p-5 animate-pulse">
+              <div key={i} className="rounded-lg border border-sidebar-border/60 bg-card p-5 animate-pulse">
                 <div className="h-3 w-20 bg-white/10 rounded mb-3" />
                 <div className="h-7 w-28 bg-white/10 rounded" />
               </div>
@@ -371,7 +397,7 @@ export default function PortfolioPage() {
       ) : (
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-white/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+            <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
               <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-2">
                 TOTAL VALUE
               </p>
@@ -387,7 +413,7 @@ export default function PortfolioPage() {
                 )}
               </div>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+            <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
               <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-2">
                 CLAIMABLE REVENUE
               </p>
@@ -395,7 +421,7 @@ export default function PortfolioPage() {
                 {formatMoneyFull(kpis.claimableRevenue)}
               </span>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+            <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
               <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-2">
                 ACTIVE RIGHTS
               </p>
@@ -403,7 +429,7 @@ export default function PortfolioPage() {
                 {kpis.activeRights}
               </span>
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+            <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
               <p className="text-[10px] font-sans tracking-wider text-muted-foreground uppercase mb-2">
                 AVG. RETURN
               </p>
@@ -435,7 +461,7 @@ export default function PortfolioPage() {
               </button>
             </div>
 
-            <div className="rounded-lg border border-white/10 bg-black/20 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+            <div className="rounded-lg border border-sidebar-border/60 bg-card overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
               {holdings.length === 0 ? (
                 <div className="p-12 text-center">
                   <p className="text-sm text-muted-foreground">
@@ -460,7 +486,7 @@ export default function PortfolioPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/10">
+                      <tr className="border-b border-white/5">
                         <th className="py-4 px-4 text-left text-[10px] font-sans tracking-wider text-muted-foreground uppercase">
                           ASSET
                         </th>
@@ -482,9 +508,7 @@ export default function PortfolioPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {holdings.map((row) => {
-                        const isOwnerOnly = row.totalShares === 0n;
-                        return (
+                      {holdings.map((row) => (
                           <tr
                             key={row.horseId}
                             className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors"
@@ -499,24 +523,24 @@ export default function PortfolioPage() {
                             </td>
                             <td className="py-4 px-4">
                               <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                                isOwnerOnly
+                                row.isOwnerOnly
                                   ? "border-prestige-gold/30 text-prestige-gold bg-prestige-gold/10"
                                   : "border-white/20 text-muted-foreground bg-white/5"
                               }`}>
-                                {isOwnerOnly ? "Owner" : "Shares"}
+                                {row.isOwnerOnly ? "Owner" : "Shares"}
                               </span>
                             </td>
                             <td className="py-4 px-4 text-muted-foreground">
-                              {isOwnerOnly ? "—" : `${row.shares}/${row.totalShares.toLocaleString()}`}
+                              {`${row.shares}/${row.totalShares.toLocaleString()}`}
                             </td>
                             <td className="py-4 px-4 text-foreground">
-                              {isOwnerOnly ? "—" : formatMoneyFull(Number(row.value) / 1e18)}
+                              {formatMoneyFull(Number(row.value) / 1e18)}
                             </td>
                             <td className="py-4 px-4 font-semibold text-prestige-gold">
-                              {isOwnerOnly ? "—" : formatMoneyFull(Number(row.claimable) / 1e18)}
+                              {row.claimable > 0n ? formatMoneyFull(Number(row.claimable) / 1e18) : "—"}
                             </td>
                             <td className="py-4 px-4 text-right">
-                              {isOwnerOnly ? (
+                              {row.isOwnerOnly ? (
                                 <Link
                                   href={`/horse/${row.horseId}`}
                                   className="px-3 py-1.5 rounded border border-white/20 text-foreground text-xs hover:bg-white/10 transition-colors inline-block"
@@ -534,8 +558,7 @@ export default function PortfolioPage() {
                               )}
                             </td>
                           </tr>
-                        );
-                      })}
+                        ))}
                     </tbody>
                   </table>
                 </div>
@@ -546,7 +569,7 @@ export default function PortfolioPage() {
           {holdings.length > 0 && (
             <section className="grid gap-6 lg:grid-cols-2">
               {topPerformer && (
-                <div className="rounded-lg border border-white/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+                <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
                   <h3 className="text-[10px] font-sans tracking-[0.2em] text-prestige-gold uppercase mb-4">
                     TOP PERFORMER
                   </h3>
@@ -582,7 +605,7 @@ export default function PortfolioPage() {
                 </div>
               )}
 
-              <div className="rounded-lg border border-white/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+              <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
                 <h3 className="text-[10px] font-sans tracking-[0.2em] text-prestige-gold uppercase mb-4">
                   REVENUE BREAKDOWN
                 </h3>
@@ -625,7 +648,7 @@ export default function PortfolioPage() {
             </section>
           )}
 
-          <section className="rounded-lg border border-white/10 bg-black/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+          <section className="rounded-lg border border-sidebar-border/60 bg-card p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
             <h2 className="text-xs font-semibold text-foreground tracking-wide mb-2">
               Agents and advisors
             </h2>
@@ -636,7 +659,7 @@ export default function PortfolioPage() {
             </p>
             <Link
               href="/agent"
-              className="inline-flex px-4 py-2 rounded-md bg-prestige-gold text-background font-medium hover:bg-prestige-gold/90 transition-colors text-sm"
+              className="inline-flex px-4 py-2 rounded-md border border-prestige-gold/50 bg-gradient-to-r from-prestige-gold/15 to-prestige-gold/5 text-prestige-gold font-medium hover:from-prestige-gold/25 hover:to-prestige-gold/10 hover:border-prestige-gold/70 transition-colors text-sm"
             >
               Open agents console
             </Link>

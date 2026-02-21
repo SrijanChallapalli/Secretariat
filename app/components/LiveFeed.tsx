@@ -2,18 +2,85 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  Trophy,
+  Crown,
+  AlertTriangle,
+  Newspaper,
+  Sparkles,
+  Ticket,
+  Baby,
+  ArrowRightLeft,
+} from "lucide-react";
 import { usePublicClient, useReadContracts } from "wagmi";
 import { parseAbiItem, formatEther } from "viem";
 import { addresses, abis } from "@/lib/contracts";
 import { parseRawHorseData } from "@/lib/on-chain-mapping";
 
+export type EventKind =
+  | "race_winner"
+  | "race"
+  | "injury"
+  | "news"
+  | "mint"
+  | "breeding_right"
+  | "offspring_minted"
+  | "transfer";
+
 type FeedEvent = {
   id: string;
   type: "oracle" | "breeding" | "transfer";
+  eventKind: EventKind;
   label: string;
   detail: string;
   timestamp: number;
   tokenId?: number;
+};
+
+const EVENT_PILL_CONFIG: Record<
+  EventKind,
+  { icon: React.ComponentType<{ className?: string }>; label: string; pillClass: string }
+> = {
+  race_winner: {
+    icon: Crown,
+    label: "Winner",
+    pillClass: "text-prestige-gold bg-prestige-gold/15 border-prestige-gold/30",
+  },
+  race: {
+    icon: Trophy,
+    label: "Race",
+    pillClass: "text-terminal-amber bg-terminal-amber/15 border-terminal-amber/30",
+  },
+  injury: {
+    icon: AlertTriangle,
+    label: "Injury",
+    pillClass: "text-terminal-red bg-terminal-red/15 border-terminal-red/30",
+  },
+  news: {
+    icon: Newspaper,
+    label: "News",
+    pillClass: "text-terminal-cyan bg-terminal-cyan/15 border-terminal-cyan/30",
+  },
+  mint: {
+    icon: Sparkles,
+    label: "Minted",
+    pillClass: "text-terminal-green bg-terminal-green/15 border-terminal-green/30",
+  },
+  breeding_right: {
+    icon: Ticket,
+    label: "Breeding Right",
+    pillClass: "text-primary bg-primary/15 border-primary/30",
+  },
+  offspring_minted: {
+    icon: Baby,
+    label: "Offspring",
+    pillClass: "text-prestige-gold bg-prestige-gold/15 border-prestige-gold/30",
+  },
+  transfer: {
+    icon: ArrowRightLeft,
+    label: "Transfer",
+    pillClass: "text-muted-foreground bg-white/10 border-white/20",
+  },
 };
 
 const POLL_INTERVAL_MS = 5_000;
@@ -46,6 +113,47 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function EventItem({
+  event,
+  displayName,
+  href,
+}: {
+  event: FeedEvent;
+  displayName?: string;
+  href?: string;
+}) {
+  const config = EVENT_PILL_CONFIG[event.eventKind];
+  const Icon = config.icon;
+  const label = displayName ?? event.label;
+  const isWinner = event.eventKind === "race_winner";
+  const content = (
+    <div
+      className={`flex items-center gap-3 p-3 rounded-lg border border-sidebar-border/60 bg-card/80 hover:bg-card hover:border-prestige-gold/20 transition-all duration-200 group ${
+        isWinner ? "gold-shimmer" : ""
+      }`}
+    >
+      <span
+        className={`inline-flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-full border text-[10px] font-medium uppercase tracking-wider ${config.pillClass}`}
+      >
+        <Icon className="h-3 w-3" />
+        {config.label}
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-foreground truncate">{label}</p>
+        <p className="text-[11px] text-muted-foreground truncate">{event.detail}</p>
+      </div>
+    </div>
+  );
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    );
+  }
+  return content;
+}
+
 export default function LiveFeed() {
   const client = usePublicClient();
   const [events, setEvents] = useState<FeedEvent[]>([]);
@@ -71,30 +179,37 @@ export default function LiveFeed() {
 
           for (const log of raceLogs) {
             const args = log.args;
+            const placing = Number(args.placing ?? 0);
             newEvents.push({
               id: `race-${log.transactionHash}-${log.logIndex}`,
               type: "oracle",
-              label: `Race Result #${args.tokenId}`,
-              detail: `P${args.placing} — ${formatEther(args.earningsADI ?? 0n)} ADI earned`,
+              eventKind: placing === 1 ? "race_winner" : "race",
+              label: placing === 1 ? `Winner #${args.tokenId}` : `Race Result #${args.tokenId}`,
+              detail: `P${placing} — ${formatEther(args.earningsADI ?? 0n)} ADI earned`,
               timestamp: Date.now(),
+              tokenId: Number(args.tokenId ?? 0),
             });
           }
           for (const log of injuryLogs) {
             newEvents.push({
               id: `injury-${log.transactionHash}-${log.logIndex}`,
               type: "oracle",
+              eventKind: "injury",
               label: `Injury #${log.args.tokenId}`,
               detail: `Severity ${Number(log.args.severityBps ?? 0) / 100}%`,
               timestamp: Date.now(),
+              tokenId: Number(log.args.tokenId ?? 0),
             });
           }
           for (const log of newsLogs) {
             newEvents.push({
               id: `news-${log.transactionHash}-${log.logIndex}`,
               type: "oracle",
+              eventKind: "news",
               label: `News #${log.args.tokenId}`,
               detail: `Sentiment ${Number(log.args.sentimentBps ?? 0) / 100}%`,
               timestamp: Date.now(),
+              tokenId: Number(log.args.tokenId ?? 0),
             });
           }
         }
@@ -110,6 +225,7 @@ export default function LiveFeed() {
             newEvents.push({
               id: `bred-${log.transactionHash}-${log.logIndex}`,
               type: "breeding",
+              eventKind: "offspring_minted",
               label: `Offspring minted`,
               detail: `Sire #${log.args.stallionId} × Mare #${log.args.mareId} → #${offspringId}`,
               timestamp: Date.now(),
@@ -120,6 +236,7 @@ export default function LiveFeed() {
             newEvents.push({
               id: `br-${log.transactionHash}-${log.logIndex}`,
               type: "breeding",
+              eventKind: "breeding_right",
               label: `Breeding right purchased`,
               detail: `Stallion #${log.args.stallionId} by ${String(log.args.buyer ?? "").slice(0, 8)}…`,
               timestamp: Date.now(),
@@ -143,6 +260,7 @@ export default function LiveFeed() {
             newEvents.push({
               id: `transfer-${log.transactionHash}-${log.logIndex}`,
               type: "transfer",
+              eventKind: isMint ? "mint" : "transfer",
               label: isMint ? `Horse #${tokenId} minted` : `Horse #${tokenId} transferred`,
               detail: isMint ? `To ${to.slice(0, 8)}…` : `${from.slice(0, 8)}… → ${to.slice(0, 8)}…`,
               timestamp: Date.now(),
@@ -199,7 +317,7 @@ export default function LiveFeed() {
   return (
     <div className="p-5 space-y-8 font-sans text-brand-ivory">
       <section>
-        <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+        <h3 className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-prestige-gold mb-4 flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-prestige-gold animate-pulse" />
           Live Oracle Feed
           {lastPoll > 0 && (
@@ -213,47 +331,37 @@ export default function LiveFeed() {
         ) : (
           <div className="space-y-2">
             {oracleEvents.map((e) => (
-              <div key={e.id} className="flex items-center justify-between py-2 px-3 rounded bg-white/[0.02] border border-white/5 text-xs">
-                <span className="text-brand-ivory font-medium">{e.label}</span>
-                <span className="text-muted-foreground">{e.detail}</span>
-              </div>
+              <EventItem
+                key={e.id}
+                event={e}
+                href={e.tokenId != null ? `/horse/${e.tokenId}` : undefined}
+              />
             ))}
           </div>
         )}
       </section>
 
       <section>
-        <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-muted-foreground mb-4">
+        <h3 className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-prestige-gold mb-4">
           Breeding Activity
         </h3>
         {breedingEvents.length === 0 ? (
           <p className="text-xs text-muted-foreground py-3">No breeding activity on chain yet.</p>
         ) : (
           <div className="space-y-2">
-            {breedingEvents.map((e) => {
-              const content = (
-                <>
-                  <span className="text-brand-ivory font-medium">{e.label}</span>
-                  <span className="text-muted-foreground">{e.detail}</span>
-                </>
-              );
-              const baseClass = "flex items-center justify-between py-2 px-3 rounded bg-white/[0.02] border border-white/5 text-xs";
-              return e.tokenId != null ? (
-                <Link key={e.id} href={`/horse/${e.tokenId}`} className={`${baseClass} hover:bg-white/[0.04] hover:border-prestige-gold/20 transition-colors`}>
-                  {content}
-                </Link>
-              ) : (
-                <div key={e.id} className={baseClass}>
-                  {content}
-                </div>
-              );
-            })}
+            {breedingEvents.map((e) => (
+              <EventItem
+                key={e.id}
+                event={e}
+                href={e.tokenId != null ? `/horse/${e.tokenId}` : undefined}
+              />
+            ))}
           </div>
         )}
       </section>
 
       <section>
-        <h3 className="text-[10px] font-sans font-bold uppercase tracking-widest text-muted-foreground mb-4">
+        <h3 className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-prestige-gold mb-4">
           Transfers &amp; Mints
         </h3>
         {transferEvents.length === 0 ? (
@@ -267,21 +375,13 @@ export default function LiveFeed() {
                   : e.label.split(" ")[0];
               const suffix = e.label.includes("minted") ? "minted" : "transferred";
               const transferLabel = `${displayName} ${suffix}`;
-              const content = (
-                <>
-                  <span className="text-brand-ivory font-medium">{transferLabel}</span>
-                  <span className="text-muted-foreground">{e.detail}</span>
-                </>
-              );
-              const baseClass = "flex items-center justify-between py-2 px-3 rounded bg-white/[0.02] border border-white/5 text-xs";
-              return e.tokenId != null ? (
-                <Link key={e.id} href={`/horse/${e.tokenId}`} className={`${baseClass} hover:bg-white/[0.04] hover:border-prestige-gold/20 transition-colors`}>
-                  {content}
-                </Link>
-              ) : (
-                <div key={e.id} className={baseClass}>
-                  {content}
-                </div>
+              return (
+                <EventItem
+                  key={e.id}
+                  event={e}
+                  displayName={transferLabel}
+                  href={e.tokenId != null ? `/horse/${e.tokenId}` : undefined}
+                />
               );
             })}
           </div>

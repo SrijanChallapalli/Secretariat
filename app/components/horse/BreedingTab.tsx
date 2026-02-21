@@ -26,7 +26,7 @@ export function BreedingTab({ horse }: BreedingTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
           BREEDING LISTING
         </h3>
@@ -71,7 +71,7 @@ export function BreedingTab({ horse }: BreedingTabProps) {
         )}
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <div className="flex items-center gap-2 mb-4">
           <Trophy className="h-4 w-4 text-prestige-gold shrink-0" />
           <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase">
@@ -85,18 +85,18 @@ export function BreedingTab({ horse }: BreedingTabProps) {
         </p>
         <Link
           href={breedHref}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-prestige-gold text-background font-medium hover:bg-prestige-gold/90 transition-colors text-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md border border-prestige-gold/70 bg-gradient-to-r from-prestige-gold/15 to-prestige-gold/5 text-prestige-gold font-medium hover:from-prestige-gold/25 hover:to-prestige-gold/10 transition-all text-sm"
         >
           <Dna className="h-4 w-4" />
           {stallion ? "Breed with this stallion" : "Breed this mare"}
         </Link>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 overflow-hidden">
         <PedigreeTree
           tokenId={horse.id}
           horseName={horse.name}
-          maxDepth={4}
+          maxDepth={3}
         />
       </div>
     </div>

@@ -47,7 +47,7 @@ export function MarketTable({
     sticky?: boolean;
   }) => (
     <th
-      className={`cursor-pointer hover:text-brand-ivory transition-colors text-[10px] font-sans uppercase tracking-wider text-muted-foreground/80 py-4 px-4 text-left ${sticky ? "sticky left-0 bg-white/5 z-20 min-w-[180px]" : ""}`}
+      className={`cursor-pointer hover:text-brand-ivory transition-colors text-[10px] font-sans uppercase tracking-wider text-muted-foreground/80 py-4 px-4 text-left ${sticky ? "sticky left-0 bg-card z-20 min-w-[180px]" : ""}`}
       onClick={() => onSort(field)}
     >
       <div className="flex items-center gap-1.5">
@@ -66,11 +66,11 @@ export function MarketTable({
   );
 
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+    <div className="rounded-lg border border-sidebar-border/60 bg-card overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[900px]">
           <thead>
-            <tr className="border-b border-white/10 bg-white/5">
+            <tr className="border-b border-white/5">
               <SortHeader label="HORSE" field="name" sticky />
               <SortHeader label="VALUATION" field="valuationUsd" />
               <SortHeader label="24H" field="change24hPct" />
@@ -99,7 +99,7 @@ export function MarketTable({
                     className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors cursor-pointer group"
                     onClick={() => router.push(`/horse/${row.id}`)}
                   >
-                  <td className="py-4 px-4 sticky left-0 bg-black/20 backdrop-blur-sm z-10 min-w-[180px]">
+                  <td className="py-4 px-4 sticky left-0 bg-card backdrop-blur-sm z-10 min-w-[180px]">
                     <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="font-semibold text-foreground group-hover:text-prestige-gold transition-colors truncate">

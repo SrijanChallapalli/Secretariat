@@ -40,7 +40,7 @@ export function AnalyticsTab({ horse }: AnalyticsTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
           TRAIT VECTOR
         </h3>
@@ -69,7 +69,7 @@ export function AnalyticsTab({ horse }: AnalyticsTabProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-4">
           VALUATION DRIVERS
         </h3>

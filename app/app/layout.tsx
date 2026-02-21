@@ -40,6 +40,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem("secretariat-theme");document.documentElement.setAttribute("data-theme",t==="terminal"?"terminal":"racing-luxury");})();`,
+          }}
+        />
+      </head>
       <body className={`min-h-screen antialiased ${cinzel.variable} ${playfair.variable} ${inter.variable} ${jetbrainsMono.variable} font-sans`} suppressHydrationWarning>
         <ClientOnly>
           <Providers>

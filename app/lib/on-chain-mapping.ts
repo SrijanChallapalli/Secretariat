@@ -7,6 +7,7 @@ import type { HorseHeatmapItem, HeatmapColor, RiskLevel } from "@/data/mockHorse
 import type { MarketListing, ListingColor, SoundnessStatus } from "@/data/mockMarketListings";
 import type { HorseFullData } from "@/data/mockHorses";
 import { formatEther } from "viem";
+import { isDemoMode, getDemoEnrichment } from "@/lib/demo-enrichment";
 
 export type RawHorseData = {
   name: string;
@@ -90,12 +91,14 @@ export function mapToHorseHeatmapItem(
   const valuation = Number(formatEther(raw.valuationADI));
   const pedigree = raw.pedigreeScore / 100;
   const color = colorForId(tokenId);
-  const changePct = demoChangePct(tokenId, pedigree);
+  const demo = isDemoMode();
+  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuation) : null;
+  const changePct = enrichment?.changePct ?? demoChangePct(tokenId, pedigree);
   return {
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
-    bloodline1: bloodlineLabel(raw.sireId),
-    bloodline2: bloodlineLabel(raw.damId),
+    bloodline1: enrichment?.sireLabel ?? bloodlineLabel(raw.sireId),
+    bloodline2: enrichment?.damLabel ?? bloodlineLabel(raw.damId),
     valuation,
     changePct,
     risk: riskFromPedigree(pedigree),
@@ -114,19 +117,25 @@ export function mapToMarketListing(
   const uses = listing ? Number(listing.usedCount) : 0;
   const maxUses = listing ? Number(listing.maxUses) : 0;
   const color = colorForId(tokenId) as ListingColor;
-  const soundness: SoundnessStatus = raw.injured ? "CAUTION" : "MONITOR";
+  const demo = isDemoMode();
+  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuationUsd) : null;
+  const soundness: SoundnessStatus = raw.injured
+    ? "CAUTION"
+    : enrichment && enrichment.soundness >= 5
+      ? "SOUND"
+      : "MONITOR";
 
   return {
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
     color,
-    bloodlineA: bloodlineLabel(raw.sireId),
-    bloodlineB: bloodlineLabel(raw.damId),
+    bloodlineA: enrichment?.sireLabel ?? bloodlineLabel(raw.sireId),
+    bloodlineB: enrichment?.damLabel ?? bloodlineLabel(raw.damId),
     valuationUsd,
-    change24hPct: 0,
+    change24hPct: enrichment?.changePct ?? 0,
     soundness,
-    wins: 0,
-    grade: "—",
+    wins: enrichment?.totalWins ?? 0,
+    grade: enrichment?.grade ?? "—",
     studFeeUsd,
     uses,
     demandScore: raw.pedigreeScore,
@@ -150,32 +159,37 @@ export function mapToHorseFullData(
         })
       : "—";
 
+  const demo = isDemoMode();
+  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuation) : null;
+  const dnaHashRaw = raw.dnaHash && raw.dnaHash !== "0x" ? raw.dnaHash : null;
+  const dnaHash = enrichment?.dnaHash ?? dnaHashRaw ?? "0x0";
+
   return {
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
     valuation,
-    changePct: 0,
+    changePct: enrichment?.changePct ?? 0,
     ownerAddress,
-    soundness: raw.injured ? 1 : 3,
+    soundness: enrichment?.soundness ?? (raw.injured ? 1 : 3),
     soundnessMax: 5,
     pedigree,
     color,
     foaled,
-    sire: sireOrDamLabel(raw.sireId),
-    dam: sireOrDamLabel(raw.damId),
-    majorResult: "No results yet",
-    stewardNote: "Pending review",
-    dnaHash: raw.dnaHash && raw.dnaHash !== "0x" ? raw.dnaHash : "0x0",
-    metadataPointer: raw.dnaHash && raw.dnaHash !== "0x" ? raw.dnaHash.slice(0, 18) : "N/A",
-    lastResult: "Awaiting oracle",
+    sire: enrichment?.sireLabel ?? sireOrDamLabel(raw.sireId),
+    dam: enrichment?.damLabel ?? sireOrDamLabel(raw.damId),
+    majorResult: enrichment?.majorResult ?? "No results yet",
+    stewardNote: enrichment?.stewardNote ?? "Pending review",
+    dnaHash,
+    metadataPointer: dnaHash !== "0x0" ? dnaHash.slice(0, 18) : "N/A",
+    lastResult: enrichment?.lastResult ?? "Awaiting oracle",
     oracleSource: "0G Oracle",
-    valuationOverTime: [],
-    oracleEvents: [],
+    valuationOverTime: enrichment?.valuationOverTime ?? [],
+    oracleEvents: enrichment?.oracleEvents ?? [],
     stats: {
       age: computeAge(raw.birthTimestamp),
-      totalWins: 0,
-      gradeWins: 0,
-      injuries: raw.injured ? 1 : 0,
+      totalWins: enrichment?.totalWins ?? 0,
+      gradeWins: enrichment?.gradeWins ?? 0,
+      injuries: enrichment?.injuries ?? (raw.injured ? 1 : 0),
       pedigree,
     },
     breedingListing: listing
@@ -189,7 +203,7 @@ export function mapToHorseFullData(
           remainingUses: 0,
           allowlist: "—",
         },
-    breedingPicks: [],
+    breedingPicks: enrichment?.breedingPicks ?? [],
     traitVector: {
       speed: raw.traitVector[0] ?? 0,
       stamina: raw.traitVector[1] ?? 0,
@@ -197,7 +211,7 @@ export function mapToHorseFullData(
       durability: raw.traitVector[3] ?? 0,
       pedigree,
     } as HorseFullData["traitVector"],
-    valuationDrivers: [],
+    valuationDrivers: enrichment?.valuationDrivers ?? [],
   };
 }
 

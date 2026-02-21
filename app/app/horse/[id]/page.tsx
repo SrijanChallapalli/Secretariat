@@ -12,6 +12,7 @@ import {
   parseRawListing,
 } from "@/lib/on-chain-mapping";
 import { HorseHero } from "@/components/horse/HorseHero";
+import { BiometricScanSection } from "@/components/horse/BiometricScanSection";
 import { HorseTabs, type HorseTabId } from "@/components/horse/HorseTabs";
 import { OverviewTab } from "@/components/horse/OverviewTab";
 import { OwnershipTab } from "@/components/horse/OwnershipTab";
@@ -104,7 +105,7 @@ export default function HorseDetailPage() {
         >
           ← Back
         </Link>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-12 text-center animate-pulse">
+        <div className="rounded-lg border border-sidebar-border/60 bg-card p-12 text-center animate-pulse">
           <div className="h-8 w-48 bg-white/10 rounded mx-auto mb-4" />
           <div className="h-4 w-64 bg-white/10 rounded mx-auto mb-2" />
           <div className="h-4 w-40 bg-white/10 rounded mx-auto" />
@@ -123,7 +124,7 @@ export default function HorseDetailPage() {
         >
           ← Back
         </Link>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-12 text-center">
+        <div className="rounded-lg border border-sidebar-border/60 bg-card p-12 text-center">
           <p className="text-lg text-muted-foreground">
             Horse not found. Token ID {id} does not exist on chain.
           </p>
@@ -158,7 +159,9 @@ export default function HorseDetailPage() {
         }
       />
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <BiometricScanSection tokenId={horse.id} />
+
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <div className="flex items-center gap-2 mb-4">
           <Home className="h-4 w-4 text-prestige-gold shrink-0" />
           <h2 className="text-xs font-semibold tracking-[0.2em] text-muted-foreground uppercase">
@@ -202,7 +205,7 @@ export default function HorseDetailPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-5">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <div className="flex items-center gap-2 mb-4">
           <FileText className="h-4 w-4 text-prestige-gold shrink-0" />
           <h2 className="text-xs font-semibold tracking-[0.2em] text-muted-foreground uppercase">

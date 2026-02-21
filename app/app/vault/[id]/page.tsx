@@ -204,7 +204,7 @@ export default function VaultPage() {
           <input
             type="number"
             min={1}
-            className="w-24 px-3 py-2 rounded-sm bg-secondary border border-border text-sm"
+            className="w-24 px-3 py-2 rounded-sm bg-input border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             value={shares}
             onChange={(e) => setShares(e.target.value)}
           />

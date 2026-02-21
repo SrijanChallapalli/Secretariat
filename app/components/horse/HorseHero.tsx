@@ -43,7 +43,7 @@ export function HorseHero({
         ← Back
       </Link>
 
-      <div className="rounded-lg border border-white/10 bg-black/20 p-6 space-y-4">
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-6 space-y-4">
         <p className="text-[10px] font-sans tracking-[0.2em] text-muted-foreground uppercase">
           REGISTERED THOROUGHBRED
         </p>
@@ -72,14 +72,14 @@ export function HorseHero({
           <button
             type="button"
             onClick={onBuyShares}
-            className="px-5 py-2.5 rounded-md bg-prestige-gold text-background font-medium hover:bg-prestige-gold/90 transition-colors"
+            className="px-5 py-2.5 rounded-md border border-prestige-gold/60 bg-gradient-to-b from-prestige-gold/15 to-prestige-gold/5 text-prestige-gold font-medium hover:from-prestige-gold/25 hover:to-prestige-gold/10 transition-colors"
           >
             Buy Shares
           </button>
           {breedHref && (
             <Link
               href={breedHref}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md bg-prestige-gold text-background font-medium hover:bg-prestige-gold/90 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md border border-prestige-gold/60 bg-gradient-to-b from-prestige-gold/15 to-prestige-gold/5 text-prestige-gold font-medium hover:from-prestige-gold/25 hover:to-prestige-gold/10 transition-colors"
             >
               <Dna className="h-3.5 w-3.5" />
               Breed

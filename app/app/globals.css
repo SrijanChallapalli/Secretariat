@@ -3,72 +3,91 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    /* Fonts managed via next/font in layout.tsx */
-    
-    /* Background: Deep Mahogany/Espresso */
-    --background: 0 30% 10%;
-    /* Foreground: Ivory/Warm White */
+  /* Racing luxury (refined heritage) – default */
+  :root,
+  [data-theme="racing-luxury"] {
+    --card-hex: #1a0f0f;
+    --background: 0 25% 12%;
     --foreground: 40 30% 88%;
-
-    /* Cards: Darker Brown */
     --card: 0 30% 8%;
     --card-foreground: 40 30% 88%;
-
-    /* Popover: Darker Brown */
     --popover: 0 30% 8%;
     --popover-foreground: 40 30% 88%;
-
-    /* Primary: Gold */
-    --primary: 42 60% 57%;
+    --primary: 42 85% 58%;
     --primary-foreground: 0 30% 10%;
-
-    /* Secondary: Hunter Green */
     --secondary: 160 60% 20%;
     --secondary-foreground: 40 30% 88%;
-
-    /* Muted: Dark Brown */
     --muted: 0 20% 15%;
     --muted-foreground: 42 40% 60%;
-
-    /* Accent: Dark Green/Gold Mix */
-    --accent: 160 50% 15%;
-    --accent-foreground: 42 60% 57%;
-
-    /* Destructive: Deep Red */
-    --destructive: 0 70% 40%;
+    --accent: 185 80% 50%;
+    --accent-foreground: 0 30% 10%;
+    --destructive: 350 84% 60%;
     --destructive-foreground: 40 30% 95%;
-
-    /* Border: Gold/Brown */
     --border: 42 30% 20%;
     --input: 0 25% 12%;
-    --ring: 42 60% 57%;
-
+    --ring: 42 85% 58%;
     --radius: 0.375rem;
-
-    /* Terminal colors adjusted for heritage feeling */
-    --terminal-green: 160 60% 40%;
-    --terminal-red: 0 70% 50%;
+    --terminal-green: 160 84% 39%;
+    --terminal-red: 350 84% 60%;
     --terminal-amber: 40 80% 60%;
-    --terminal-cyan: 190 60% 45%;
-
-    /* Custom Heritage Colors */
+    --terminal-cyan: 185 80% 50%;
     --heritage-walnut: 18 33% 19%;
     --heritage-walnut-light: 18 28% 25%;
-    --prestige-gold: 42 75% 55%;
+    --prestige-gold: 42 85% 58%;
     --prestige-gold-muted: 42 50% 40%;
-
     --sidebar-background: 0 30% 8%;
     --sidebar-foreground: 40 20% 70%;
-    --sidebar-primary: 42 60% 57%;
+    --sidebar-primary: 42 85% 58%;
     --sidebar-primary-foreground: 0 30% 10%;
     --sidebar-accent: 0 25% 12%;
-    --sidebar-accent-foreground: 42 60% 57%;
+    --sidebar-accent-foreground: 42 85% 58%;
     --sidebar-border: 42 30% 15%;
-    --sidebar-ring: 42 60% 57%;
-
+    --sidebar-ring: 42 85% 58%;
     --brand-ivory: 40 30% 88%;
-    --brand-gold: 42 60% 57%;
+    --brand-gold: 42 85% 58%;
+  }
+
+  /* High-contrast terminal */
+  [data-theme="terminal"] {
+    --card-hex: #0a0c12;
+    --background: 220 25% 6%;
+    --foreground: 40 20% 96%;
+    --card: 220 25% 8%;
+    --card-foreground: 40 20% 96%;
+    --popover: 220 25% 8%;
+    --popover-foreground: 40 20% 96%;
+    --primary: 45 95% 55%;
+    --primary-foreground: 220 25% 6%;
+    --secondary: 185 90% 50%;
+    --secondary-foreground: 220 25% 6%;
+    --muted: 220 20% 12%;
+    --muted-foreground: 40 15% 70%;
+    --accent: 185 90% 50%;
+    --accent-foreground: 220 25% 6%;
+    --destructive: 0 85% 55%;
+    --destructive-foreground: 40 20% 98%;
+    --border: 220 20% 18%;
+    --input: 220 20% 10%;
+    --ring: 45 95% 55%;
+    --radius: 0.375rem;
+    --terminal-green: 150 80% 45%;
+    --terminal-red: 0 85% 55%;
+    --terminal-amber: 45 95% 55%;
+    --terminal-cyan: 185 90% 50%;
+    --heritage-walnut: 220 20% 12%;
+    --heritage-walnut-light: 220 18% 18%;
+    --prestige-gold: 45 95% 55%;
+    --prestige-gold-muted: 45 80% 45%;
+    --sidebar-background: 220 25% 6%;
+    --sidebar-foreground: 40 20% 90%;
+    --sidebar-primary: 45 95% 55%;
+    --sidebar-primary-foreground: 220 25% 6%;
+    --sidebar-accent: 220 20% 10%;
+    --sidebar-accent-foreground: 45 95% 55%;
+    --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 45 95% 55%;
+    --brand-ivory: 40 20% 96%;
+    --brand-gold: 45 95% 55%;
   }
 }
 
@@ -134,6 +153,79 @@
   background-size: 200% 100%;
   animation: gold-shimmer 3s ease-in-out;
 }
+
+@keyframes landing-entrance {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.landing-entrance {
+  animation: landing-entrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes horse-run {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(calc(100vw + 100%));
+  }
+}
+
+.horse-run {
+  transform-style: preserve-3d;
+  animation: horse-run 2.5s ease-in forwards;
+}
+
+@keyframes letter-stamp {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+.horse-letter {
+  opacity: 0;
+  animation: letter-stamp 0.12s ease-out forwards;
+}
+
+@keyframes title-fadeout {
+  0% { opacity: 1; }
+  100% { opacity: 0; filter: blur(4px); }
+}
+
+.horse-title-fadeout {
+  animation: title-fadeout 0.3s ease-in 2.3s forwards;
+}
+
+@keyframes terminal-enter {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.terminal-delayed {
+  opacity: 0;
+  animation: terminal-enter 0.6s ease-out 2.5s forwards;
+}
+
 
 .scrollbar-terminal::-webkit-scrollbar {
   width: 6px;

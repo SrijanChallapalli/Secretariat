@@ -15,7 +15,7 @@ export function MarketHero({
   topMoverName,
 }: MarketHeroProps) {
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.03)] relative overflow-hidden">
+    <div className="rounded-lg border border-sidebar-border/60 bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.03)] relative overflow-hidden">
       <div className="absolute right-0 top-0 w-48 h-48 opacity-5 pointer-events-none">
         <svg viewBox="0 0 100 100" className="w-full h-full text-prestige-gold">
           <path d="M50 10 Q70 30 60 50 Q50 70 30 60 Q10 50 20 30 Q30 10 50 10" fill="currentColor" />
