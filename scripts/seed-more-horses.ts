@@ -55,9 +55,9 @@ function encodeHorse(opts: {
 const EXTRA_HORSES = [
   { name: "Thunder Strike", traits: [90, 88, 75, 92, 85, 88, 82, 86], pedigreeScore: 9100, valuation: BigInt(6000e18) },
   { name: "Midnight Runner", traits: [85, 90, 80, 87, 92, 85, 88, 84], pedigreeScore: 8800, valuation: BigInt(4500e18) },
-  { name: "Golden Dawn", sireId: 0, traits: [82, 85, 78, 90, 88, 80, 85, 82], pedigreeScore: 8500, valuation: BigInt(3500e18) },
+  { name: "Golden Dawn", sireId: 0, damId: 1, traits: [82, 85, 78, 90, 88, 80, 85, 82], pedigreeScore: 8500, valuation: BigInt(3500e18) },
   { name: "Silver Bullet", traits: [88, 82, 72, 85, 90, 86, 80, 78], pedigreeScore: 8700, valuation: BigInt(4200e18) },
-  { name: "Ocean Breeze", sireId: 0, traits: [80, 88, 85, 82, 90, 82, 78, 80], pedigreeScore: 8300, valuation: BigInt(2800e18) },
+  { name: "Ocean Breeze", sireId: 0, damId: 1, traits: [80, 88, 85, 82, 90, 82, 78, 80], pedigreeScore: 8300, valuation: BigInt(2800e18) },
 ];
 
 async function main() {

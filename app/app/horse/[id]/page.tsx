@@ -1,8 +1,8 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
-import { useReadContracts, useWriteContract, useAccount, useWaitForTransactionReceipt } from "wagmi";
+import { useState, useEffect } from "react";
+import { useReadContracts, useWriteContract, useAccount, useWaitForTransactionReceipt, useBlockNumber } from "wagmi";
 import { parseEther } from "viem";
 import { addresses, abis } from "@/lib/contracts";
 import { isOnChainHorse } from "@/lib/on-chain-horses";
@@ -20,6 +20,7 @@ import { BreedingTab } from "@/components/horse/BreedingTab";
 import { AnalyticsTab } from "@/components/horse/AnalyticsTab";
 import { Home, FileText, Clock } from "lucide-react";
 import Link from "next/link";
+import { useOwnsHorseShares } from "@/lib/hooks/useOwnsHorseShares";
 
 export default function HorseDetailPage() {
   const params = useParams();
@@ -48,23 +49,37 @@ export default function HorseDetailPage() {
     args: [BigInt(id)] as [bigint],
   };
 
-  const { data: horseResult } = useReadContracts({
+  const { data: latestBlock } = useBlockNumber({ watch: true });
+  const { data: horseResult, refetch: refetchHorse } = useReadContracts({
     contracts: [horseCall, listingCall, ownerCall] as any,
+    query: { refetchInterval: 8_000, structuralSharing: false },
   });
 
-  const horse = (() => {
-    if (!horseResult || horseResult.length < 3) return null;
-    const [hRes, lRes, oRes] = horseResult;
+  useEffect(() => {
+    if (latestBlock) refetchHorse();
+  }, [latestBlock, refetchHorse]);
+
+  const ownerAddress = horseResult?.[2]?.status === "success"
+    ? (horseResult[2].result as string)
+    : null;
+
+  const isOwner = useOwnsHorseShares(id, ownerAddress);
+
+  const { horse, birthTimestamp } = (() => {
+    if (!horseResult || horseResult.length < 3) return { horse: null, birthTimestamp: undefined };
+    const [hRes, lRes] = horseResult;
     if (hRes?.status !== "success" || !hRes.result || !isOnChainHorse(hRes.result))
-      return null;
+      return { horse: null, birthTimestamp: undefined };
     const raw = parseRawHorseData(hRes.result);
-    if (!raw) return null;
+    if (!raw) return { horse: null, birthTimestamp: undefined };
     const listing =
       lRes?.status === "success" && lRes.result
         ? parseRawListing(lRes.result)
         : null;
-    const owner = (oRes?.status === "success" ? oRes.result : null) as string | null;
-    return mapToHorseFullData(id, raw, listing, owner ?? "0x0");
+    return {
+      horse: mapToHorseFullData(id, raw, listing, ownerAddress ?? "0x0"),
+      birthTimestamp: raw.birthTimestamp,
+    };
   })();
 
   const handleBuyShares = () => {
@@ -74,7 +89,7 @@ export default function HorseDetailPage() {
       address: addresses.syndicateVaultFactory,
       abi: abis.HorseSyndicateVaultFactory,
       functionName: "createVault",
-      args: [BigInt(id), BigInt(10000), parseEther("1"), parseEther("500")],
+      args: [BigInt(id), BigInt(10000), parseEther("1"), parseEther("500"), 4600n, 8208n],
     }, {
       onSuccess: () => setTxStatus("Vault creation tx submitted!"),
       onError: (err) => setTxStatus(`Error: ${err.message.slice(0, 80)}`),
@@ -159,7 +174,7 @@ export default function HorseDetailPage() {
         }
       />
 
-      <BiometricScanSection tokenId={horse.id} />
+      <BiometricScanSection tokenId={horse.id} birthTimestamp={birthTimestamp} isOwner={isOwner} />
 
       <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
         <div className="flex items-center gap-2 mb-4">

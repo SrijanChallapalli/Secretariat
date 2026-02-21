@@ -5,10 +5,11 @@ import os from "os";
 import { fetchHorseFeatures } from "./chain-reader.js";
 import { createBiometricScan } from "./biometric-engine.js";
 import type { FeatureVector } from "../../shared/types.js";
+import { NEWBORN_THRESHOLD_S } from "../../shared/constants.js";
 
 /**
  * POST /biometric/calculate
- * Body: { tokenId: number, context?: { recentInjuryBps?, recentNewsSentBps?, recentRaceBoostBps? }, uploadToOg?: boolean }
+ * Body: { tokenId: number, context?: { recentInjuryBps?, recentNewsSentBps?, recentRaceBoostBps?, fatigueHistory?: FatigueHistory[] }, uploadToOg?: boolean }
  */
 export async function biometricRoute(req: Request, res: Response) {
   try {
@@ -19,6 +20,18 @@ export async function biometricRoute(req: Request, res: Response) {
     }
 
     const { features } = await fetchHorseFeatures(tokenId);
+
+    const birthTs = features.birthTimestamp ?? 0;
+    if (birthTs > 0) {
+      const ageS = Date.now() / 1000 - birthTs;
+      if (ageS < NEWBORN_THRESHOLD_S) {
+        res.status(422).json({
+          error: "Biometric scans are not available for horses under 6 months old",
+          reason: "UNDERAGE",
+        });
+        return;
+      }
+    }
 
     const fullFeatures: FeatureVector = {
       speed: 0,

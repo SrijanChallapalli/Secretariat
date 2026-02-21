@@ -72,8 +72,31 @@ function sireOrDamLabel(parentId: bigint): string {
   return parentId > 0n ? `Horse #${parentId}` : "Founder";
 }
 
+/**
+ * Track valuations across renders.  When a live on-chain change is detected
+ * (value differs between consecutive reads), persist the percentage so it
+ * keeps showing on subsequent renders even when the value is stable.
+ */
+const _baseValuations = new Map<number, number>();
+const _liveChangePct = new Map<number, number>();
+
+export function trackChangePct(tokenId: number, currentValuation: number): number {
+  const base = _baseValuations.get(tokenId);
+  if (base == null) {
+    _baseValuations.set(tokenId, currentValuation);
+    return _liveChangePct.get(tokenId) ?? 0;
+  }
+  if (base !== currentValuation && base > 0) {
+    const pct = ((currentValuation - base) / base) * 100;
+    _liveChangePct.set(tokenId, pct);
+    _baseValuations.set(tokenId, currentValuation);
+    return pct;
+  }
+  return _liveChangePct.get(tokenId) ?? 0;
+}
+
 /** Demo: inject fake changePct for heatmap when no valuation feed exists. */
-function demoChangePct(tokenId: number, pedigree: number): number {
+export function demoChangePct(tokenId: number, pedigree: number): number {
   const demo =
     process.env.NEXT_PUBLIC_DEMO_HEATMAP === "true" ||
     process.env.NEXT_PUBLIC_CHAIN_ID === "31337";
@@ -92,8 +115,9 @@ export function mapToHorseHeatmapItem(
   const pedigree = raw.pedigreeScore / 100;
   const color = colorForId(tokenId);
   const demo = isDemoMode();
-  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuation) : null;
-  const changePct = enrichment?.changePct ?? demoChangePct(tokenId, pedigree);
+  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuation, raw.birthTimestamp) : null;
+  const liveChangePct = trackChangePct(tokenId, valuation);
+  const changePct = liveChangePct !== 0 ? liveChangePct : (enrichment?.changePct ?? demoChangePct(tokenId, pedigree));
   return {
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
@@ -118,7 +142,7 @@ export function mapToMarketListing(
   const maxUses = listing ? Number(listing.maxUses) : 0;
   const color = colorForId(tokenId) as ListingColor;
   const demo = isDemoMode();
-  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuationUsd) : null;
+  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuationUsd, raw.birthTimestamp) : null;
   const soundness: SoundnessStatus = raw.injured
     ? "CAUTION"
     : enrichment && enrichment.soundness >= 5
@@ -132,7 +156,7 @@ export function mapToMarketListing(
     bloodlineA: enrichment?.sireLabel ?? bloodlineLabel(raw.sireId),
     bloodlineB: enrichment?.damLabel ?? bloodlineLabel(raw.damId),
     valuationUsd,
-    change24hPct: enrichment?.changePct ?? 0,
+    change24hPct: trackChangePct(tokenId, valuationUsd) || (enrichment?.changePct ?? 0),
     soundness,
     wins: enrichment?.totalWins ?? 0,
     grade: enrichment?.grade ?? "—",
@@ -160,7 +184,7 @@ export function mapToHorseFullData(
       : "—";
 
   const demo = isDemoMode();
-  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuation) : null;
+  const enrichment = demo ? getDemoEnrichment(tokenId, raw.name, valuation, raw.birthTimestamp) : null;
   const dnaHashRaw = raw.dnaHash && raw.dnaHash !== "0x" ? raw.dnaHash : null;
   const dnaHash = enrichment?.dnaHash ?? dnaHashRaw ?? "0x0";
 
@@ -168,7 +192,7 @@ export function mapToHorseFullData(
     id: tokenId,
     name: raw.name || `Horse #${tokenId}`,
     valuation,
-    changePct: enrichment?.changePct ?? 0,
+    changePct: trackChangePct(tokenId, valuation) || (enrichment?.changePct ?? 0),
     ownerAddress,
     soundness: enrichment?.soundness ?? (raw.injured ? 1 : 3),
     soundnessMax: 5,

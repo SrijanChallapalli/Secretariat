@@ -15,9 +15,14 @@ const CONTRACT_KEYS = [
   "NEXT_PUBLIC_SYNDICATE_VAULT_FACTORY",
   "NEXT_PUBLIC_AGENT_INFT",
   "NEXT_PUBLIC_AGENT_EXECUTOR",
+  "NEXT_PUBLIC_AGENT_RISK_CONFIG",
+  "NEXT_PUBLIC_STOP_LOSS_EXECUTOR",
+  "NEXT_PUBLIC_AGENT_WALLET",
 ];
-// Broadcast order: MockADI(0), MockINFTOracle(1), KYCRegistry(2), HorseINFT(3), BreedingMarketplace(4), CALL(5), HorseOracle(6), CALL(7), VaultFactory(8), AgentINFT(9), AgentExecutor(10)
-const TX_INDEX_MAP = [0, 2, 3, 4, 6, 8, 9, 10]; // skip MockINFTOracle, CALLs
+// Broadcast order: MockADI(0), MockINFTOracle(1), KYCRegistry(2), HorseINFT(3),
+// BreedingMarketplace(4), CALL(5), HorseOracle(6), CALL(7), VaultFactory(8),
+// AgentINFT(9), AgentExecutor(10), AgentRiskConfig(11), StopLossExecutor(12), AgentWallet(13)
+const TX_INDEX_MAP = [0, 2, 3, 4, 6, 8, 9, 10, 11, 12, 13]; // skip MockINFTOracle, CALLs
 
 const chainId = process.argv[2] ?? "16602";
 const repoRoot = path.resolve(process.cwd());

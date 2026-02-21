@@ -10,6 +10,7 @@ import { biometricRoute } from "./biometric-route.js";
 import { startIndexer, getTrainingData } from "./event-indexer.js";
 import { getPredictions, getAccuracy } from "./prediction-log.js";
 import { simulateEventRoute, applyEventRoute } from "./oracle-pipeline.js";
+import { startAutoSimulator } from "./auto-simulator.js";
 
 const app = express();
 app.use(cors());
@@ -70,5 +71,10 @@ app.listen(PORT, () => {
     startIndexer();
   } catch (e) {
     console.warn("Failed to start event indexer:", e);
+  }
+  try {
+    startAutoSimulator();
+  } catch (e) {
+    console.warn("Failed to start auto-simulator:", e);
   }
 });

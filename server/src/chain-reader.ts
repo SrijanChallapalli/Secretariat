@@ -18,6 +18,7 @@ export const og0gChain = {
 
 export const horseINFTAbi = parseAbi([
   "function getHorseData(uint256) view returns ((string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash))",
+  "function nextTokenId() view returns (uint256)",
 ]);
 
 let _publicClient: ReturnType<typeof createPublicClient> | null = null;
@@ -77,4 +78,72 @@ export async function fetchHorseFeatures(
   const name = String(r.name ?? r[0] ?? "");
 
   return { features, valuationADI, valuationADIRaw, name };
+}
+
+export interface OffspringRecord {
+  tokenId: number;
+  birthTimestamp: number;
+  valuationADIRaw: bigint;
+}
+
+/**
+ * Iterate all minted horses and return those whose sireId or damId
+ * matches the given parentTokenId.
+ *
+ * When parentTokenId is 0, we must distinguish real offspring (bred from
+ * token 0) from founder horses that have sireId=0 / damId=0 meaning
+ * "no parent." A founder has BOTH sireId=0 AND damId=0; a real offspring
+ * of token 0 has exactly one of them set to 0 and the other > 0.
+ */
+export async function findOffspring(
+  parentTokenId: number,
+): Promise<OffspringRecord[]> {
+  if (!HORSE_INFT || HORSE_INFT === "0x0000000000000000000000000000000000000000") {
+    return [];
+  }
+
+  const client = getPublicClient();
+  const total = Number(
+    await client.readContract({
+      address: HORSE_INFT as `0x${string}`,
+      abi: horseINFTAbi,
+      functionName: "nextTokenId",
+    }),
+  );
+
+  const offspring: OffspringRecord[] = [];
+
+  for (let id = 0; id < total; id++) {
+    if (id === parentTokenId) continue;
+    try {
+      const raw = await client.readContract({
+        address: HORSE_INFT as `0x${string}`,
+        abi: horseINFTAbi,
+        functionName: "getHorseData",
+        args: [BigInt(id)],
+      });
+      const r = raw as any;
+      const sireId = Number(r.sireId ?? r[2] ?? 0);
+      const damId = Number(r.damId ?? r[3] ?? 0);
+
+      const sireMatch = sireId === parentTokenId;
+      const damMatch = damId === parentTokenId;
+      if (!sireMatch && !damMatch) continue;
+
+      // If parentTokenId is 0, sireId=0 AND damId=0 means "founder" (no
+      // real parents), not "offspring of token 0." Only count it as a real
+      // offspring if the OTHER parent field is non-zero.
+      if (parentTokenId === 0 && sireId === 0 && damId === 0) continue;
+
+      offspring.push({
+        tokenId: id,
+        birthTimestamp: Number(r.birthTimestamp ?? r[1] ?? 0),
+        valuationADIRaw: BigInt(r.valuationADI ?? r[6] ?? 0),
+      });
+    } catch {
+      // Token may not exist (burned or gap) — skip
+    }
+  }
+
+  return offspring;
 }

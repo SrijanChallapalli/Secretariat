@@ -158,4 +158,8 @@ contract HorseINFT is ERC721, Ownable {
     function getHorseData(uint256 tokenId) external view returns (HorseData memory) {
         return horses[tokenId];
     }
+
+    function nextTokenId() external view returns (uint256) {
+        return _nextTokenId;
+    }
 }

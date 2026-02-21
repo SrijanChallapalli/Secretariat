@@ -7,10 +7,21 @@ const SERVER_URL =
 
 type EventType = "RACE_RESULT" | "INJURY" | "NEWS";
 
+interface CascadeResult {
+  offspringTokenId: number;
+  multiplier: number;
+  reason: string;
+  previousValuationADI: string;
+  newValuationADI: string;
+  txHash: string;
+}
+
 interface PipelineResult {
   eventHash: string;
   newValuationADI: string;
   previousValuationADI: string;
+  verifiedValuationADI: string | null;
+  txStatus: "success" | "reverted" | "pending";
   multiplier: number;
   valuationResult: {
     value: number;
@@ -23,6 +34,7 @@ interface PipelineResult {
   ogTxHash: string | null;
   canonicalJson: string;
   submittedAt: string;
+  cascadingOffspring?: CascadeResult[];
 }
 
 export default function AdminPage() {
@@ -323,22 +335,42 @@ export default function AdminPage() {
           <div className="space-y-3 text-sm">
             <h3 className="font-semibold text-foreground">Pipeline Result</h3>
 
+            {/* Tx status banner */}
+            {pipeResult.txStatus === "reverted" && (
+              <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-sm p-2">
+                Transaction REVERTED on-chain. The valuation was NOT updated. Check that ORACLE_ROLE is granted and horseOracle is set on HorseINFT.
+              </div>
+            )}
+            {pipeResult.txStatus === "success" && (
+              <div className="text-xs text-terminal-green bg-terminal-green/10 border border-terminal-green/30 rounded-sm p-2">
+                Transaction confirmed on-chain.
+              </div>
+            )}
+
+            {/* Valuation change summary */}
+            <div className="rounded-sm border border-primary/30 bg-primary/5 p-3">
+              <p className="text-xs text-muted-foreground mb-1">Valuation Change</p>
+              <p className="text-base font-semibold">
+                {formatADI(pipeResult.previousValuationADI)}
+                <span className="text-muted-foreground mx-2">&rarr;</span>
+                <span className="text-primary">{formatADI(pipeResult.newValuationADI)}</span>
+                <span className="text-xs text-muted-foreground ml-2">({pipeResult.multiplier.toFixed(4)}x)</span>
+              </p>
+              {pipeResult.verifiedValuationADI && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Verified on-chain: {formatADI(pipeResult.verifiedValuationADI)}
+                  {pipeResult.verifiedValuationADI === pipeResult.newValuationADI
+                    ? " (matches)"
+                    : " (MISMATCH)"}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
               <span className="text-muted-foreground">Event Hash</span>
               <span className="font-mono truncate" title={pipeResult.eventHash}>
                 {pipeResult.eventHash.slice(0, 18)}...
               </span>
-
-              <span className="text-muted-foreground">Previous Valuation</span>
-              <span>{formatADI(pipeResult.previousValuationADI)}</span>
-
-              <span className="text-muted-foreground">New Valuation</span>
-              <span className="font-semibold text-primary">
-                {formatADI(pipeResult.newValuationADI)}
-              </span>
-
-              <span className="text-muted-foreground">Multiplier</span>
-              <span>{pipeResult.multiplier.toFixed(4)}x</span>
 
               <span className="text-muted-foreground">Confidence</span>
               <span>{(pipeResult.valuationResult.confidence * 100).toFixed(0)}%</span>
@@ -346,6 +378,11 @@ export default function AdminPage() {
               <span className="text-muted-foreground">Tx Hash</span>
               <span className="font-mono truncate" title={pipeResult.txHash}>
                 {pipeResult.txHash.slice(0, 18)}...
+              </span>
+
+              <span className="text-muted-foreground">Tx Status</span>
+              <span className={pipeResult.txStatus === "success" ? "text-terminal-green" : pipeResult.txStatus === "reverted" ? "text-destructive" : "text-muted-foreground"}>
+                {pipeResult.txStatus}
               </span>
 
               {pipeResult.ogRootHash && (
@@ -363,6 +400,23 @@ export default function AdminPage() {
                 </>
               )}
             </div>
+
+            {/* Cascading offspring */}
+            {pipeResult.cascadingOffspring && pipeResult.cascadingOffspring.length > 0 && (
+              <div className="rounded-sm border border-prestige-gold/30 bg-prestige-gold/5 p-3 space-y-2">
+                <p className="text-xs font-semibold text-prestige-gold uppercase tracking-wider">
+                  Cascading Offspring Updates ({pipeResult.cascadingOffspring.length})
+                </p>
+                {pipeResult.cascadingOffspring.map((c) => (
+                  <div key={c.offspringTokenId} className="text-xs grid grid-cols-2 gap-x-3 gap-y-0.5">
+                    <span className="text-muted-foreground">Token #{c.offspringTokenId}</span>
+                    <span>{formatADI(c.previousValuationADI)} &rarr; {formatADI(c.newValuationADI)} ({c.multiplier.toFixed(4)}x)</span>
+                    <span className="text-muted-foreground">Reason</span>
+                    <span>{c.reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Explanation */}
             {pipeResult.valuationResult.explanation && (

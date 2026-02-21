@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useReadContracts } from "wagmi";
+import { useMemo, useEffect } from "react";
+import { useReadContracts, useBlockNumber } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
 import { MAX_HORSE_ID_TO_FETCH, isOnChainHorse } from "@/lib/on-chain-horses";
 import {
@@ -39,8 +39,22 @@ export function useHorsesWithListings(opts?: { withStatus?: boolean }): HorseWit
     args: [BigInt(id)] as [bigint],
   }));
 
-  const { data: horsesData, isLoading: hLoading, isError: hError } = useReadContracts({ contracts: horseCalls });
-  const { data: listingsData, isLoading: lLoading, isError: lError } = useReadContracts({ contracts: listingCalls });
+  const { data: latestBlock } = useBlockNumber({ watch: true });
+  const { data: horsesData, isLoading: hLoading, isError: hError, refetch: refetchHorses } = useReadContracts({
+    contracts: horseCalls,
+    query: { refetchInterval: 10_000, structuralSharing: false },
+  });
+  const { data: listingsData, isLoading: lLoading, isError: lError, refetch: refetchListings } = useReadContracts({
+    contracts: listingCalls,
+    query: { refetchInterval: 10_000, structuralSharing: false },
+  });
+
+  useEffect(() => {
+    if (latestBlock) {
+      refetchHorses();
+      refetchListings();
+    }
+  }, [latestBlock, refetchHorses, refetchListings]);
 
   const horses = useMemo(() => {
     if (!horsesData || !listingsData) return [];

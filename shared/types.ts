@@ -39,7 +39,7 @@ export interface FeatureVector {
 
   // Off-chain enrichment
   age?: number;
-  sex?: "male" | "female";
+  sex?: "male" | "female" | "gelding";
   status?: "active" | "retired" | "deceased";
   wins?: number;
   totalRaces?: number;
@@ -174,25 +174,22 @@ export interface BiometricScanResult {
     confidence: number;
     valuationMultiplierBps: number;
   };
+  riskScore: 1 | 2 | 3 | 4 | 5 | 6;
+  minerDamage?: number; // Palmgren-Miner cumulative damage fraction D (0.0 – 1.0+)
   subsystems: BiometricSubsystem[];
   notes?: string[];
   source?: { kind: "SIMULATION" | "ORACLE" | "MANUAL"; confidence: number };
 }
 
 // ---------------------------------------------------------------------------
-// Risk configuration (DeFAI Mixing Board parameters)
+// Palmgren-Miner fatigue tracking
 // ---------------------------------------------------------------------------
 
-export interface RiskConfig {
-  minValuationADI: number;
-  maxDrawdownBps: number;
-  maxPositionSizeBps: number;
-  healthThreshold: number;
-  strideDeltaThresholdBps: number;
-  peakValuation: number;
-  stopLossEnabled: boolean;
-  autoRetireOnHealth: boolean;
+export interface FatigueHistory {
+  stressLevel: number;    // ni: cycles at this stress level
+  cyclesToFailure: number; // Ni: cycles to failure at this level
 }
+
 
 // ---------------------------------------------------------------------------
 // Invoice (automated OpEx)

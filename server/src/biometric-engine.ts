@@ -1,6 +1,9 @@
 /**
  * Biometric scan engine — evaluates five physiological subsystems from a
- * horse's FeatureVector and optional recent-context modifiers.
+ * horse's FeatureVector with Palmgren-Miner cumulative bone fatigue tracking
+ * and a 1-6 Risk Score scale.
+ *
+ * Risk Score 6 = 44.6x more likely to suffer a fatal breakdown.
  */
 
 import type {
@@ -9,9 +12,10 @@ import type {
   BiometricSubsystem,
   BiometricSubsystemId,
   BiometricScanResult,
+  FatigueHistory,
 } from "../../shared/types.js";
 
-const ENGINE_VERSION = "biometric-v1";
+const ENGINE_VERSION = "biometric-v2";
 
 function label(score: number): BiometricLabel {
   if (score >= 85) return "EXCEPTIONAL";
@@ -22,6 +26,37 @@ function label(score: number): BiometricLabel {
 
 function clamp(v: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+// ---------------------------------------------------------------------------
+// Palmgren-Miner's Rule — cumulative bone damage
+// D = Σ(ni / Ni)  where ni = cycles at stress level, Ni = cycles to failure
+// When D approaches 1.0, failure is mathematically guaranteed.
+// ---------------------------------------------------------------------------
+
+export function calculateMinerDamage(history: FatigueHistory[]): number {
+  if (!history || history.length === 0) return 0;
+  return history.reduce((D, h) => {
+    if (h.cyclesToFailure <= 0) return D;
+    return D + h.stressLevel / h.cyclesToFailure;
+  }, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Risk Score mapping (1-6) from overall biometric score + Miner's damage
+// ---------------------------------------------------------------------------
+
+export function computeRiskScore(
+  overallScore: number,
+  minerDamage: number,
+): 1 | 2 | 3 | 4 | 5 | 6 {
+  // Level 6 = catastrophic (44.6x breakdown likelihood)
+  if (overallScore < 25 || minerDamage >= 0.9) return 6;
+  if (overallScore < 40 || minerDamage >= 0.8) return 5;
+  if (overallScore < 55 || minerDamage >= 0.6) return 4;
+  if (overallScore < 70 || minerDamage >= 0.4) return 3;
+  if (overallScore < 85 || minerDamage >= 0.2) return 2;
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,9 +118,10 @@ function scoreLungs(f: FeatureVector): BiometricSubsystem {
   };
 }
 
-function scoreSkeletal(f: FeatureVector): BiometricSubsystem {
+function scoreSkeletal(f: FeatureVector, minerDamage: number): BiometricSubsystem {
   let score = (f.conformation * 0.5 + f.health * 0.3 + f.consistency * 0.2);
   const reasons: string[] = [];
+  const flags: string[] = [];
 
   if (f.conformation >= 85) reasons.push("Superior conformation: excellent skeletal alignment");
   if (f.injuryHistory?.length) {
@@ -99,6 +135,21 @@ function scoreSkeletal(f: FeatureVector): BiometricSubsystem {
     score = clamp(score - 12);
     reasons.push("Currently injured — skeletal stress elevated");
   }
+
+  // Palmgren-Miner fatigue impact on skeletal score
+  if (minerDamage >= 0.8) {
+    score = clamp(score - 25);
+    reasons.push(`Miner's damage D=${minerDamage.toFixed(2)} — failure mathematically approaching`);
+    flags.push("MINER_CRITICAL");
+  } else if (minerDamage >= 0.5) {
+    score = clamp(score - 15);
+    reasons.push(`Miner's damage D=${minerDamage.toFixed(2)} — significant cumulative fatigue`);
+    flags.push("MINER_ELEVATED");
+  } else if (minerDamage > 0.2) {
+    score = clamp(score - 5);
+    reasons.push(`Miner's damage D=${minerDamage.toFixed(2)} — moderate cumulative fatigue`);
+  }
+
   if (reasons.length === 0) reasons.push("Skeletal integrity within normal parameters");
 
   return {
@@ -109,6 +160,7 @@ function scoreSkeletal(f: FeatureVector): BiometricSubsystem {
     reasons,
     impactBps: Math.round((score / 100) * 2000),
     highlights: ["spine"],
+    flags: flags.length ? flags : undefined,
   };
 }
 
@@ -141,7 +193,7 @@ function scoreMusculature(f: FeatureVector): BiometricSubsystem {
   };
 }
 
-function scoreJoints(f: FeatureVector): BiometricSubsystem {
+function scoreJoints(f: FeatureVector, minerDamage: number): BiometricSubsystem {
   let score = (f.health * 0.4 + f.agility * 0.3 + f.conformation * 0.3);
   const reasons: string[] = [];
 
@@ -157,6 +209,10 @@ function scoreJoints(f: FeatureVector): BiometricSubsystem {
   if (f.injured) {
     score = clamp(score - 10);
     reasons.push("Active injury increases joint stress");
+  }
+  if (minerDamage >= 0.6) {
+    score = clamp(score - 10);
+    reasons.push("High cumulative bone fatigue increases joint failure risk");
   }
   if (reasons.length === 0) reasons.push("Joint health within acceptable range");
 
@@ -182,14 +238,17 @@ export function createBiometricScan(
     recentInjuryBps?: number;
     recentNewsSentBps?: number;
     recentRaceBoostBps?: number;
+    fatigueHistory?: FatigueHistory[];
   },
 ): BiometricScanResult {
+  const minerDamage = calculateMinerDamage(context?.fatigueHistory ?? []);
+
   const subsystems: BiometricSubsystem[] = [
     scoreHeart(features),
     scoreLungs(features),
-    scoreSkeletal(features),
+    scoreSkeletal(features, minerDamage),
     scoreMusculature(features),
-    scoreJoints(features),
+    scoreJoints(features, minerDamage),
   ];
 
   const totalWeight = subsystems.reduce((s, sub) => s + sub.impactBps, 0) || 1;
@@ -217,10 +276,15 @@ export function createBiometricScan(
           ? 500
           : -500;
 
+  const riskScore = computeRiskScore(overallScore, minerDamage);
+
   const notes: string[] = [];
   if (features.xFactorCarrier) notes.push("X-factor carrier detected");
   if (features.injured) notes.push("Horse currently listed as injured");
   if (features.retired) notes.push("Horse is retired");
+  if (minerDamage >= 0.8) notes.push(`CRITICAL: Palmgren-Miner D=${minerDamage.toFixed(3)} — bone failure imminent`);
+  else if (minerDamage >= 0.5) notes.push(`WARNING: Palmgren-Miner D=${minerDamage.toFixed(3)} — elevated fatigue`);
+  if (riskScore === 6) notes.push("RISK SCORE 6: 44.6x breakdown likelihood — Lazarus Protocol eligible");
 
   return {
     schemaVersion: "1.0",
@@ -233,6 +297,8 @@ export function createBiometricScan(
       confidence: 0.8,
       valuationMultiplierBps,
     },
+    riskScore,
+    minerDamage: minerDamage > 0 ? minerDamage : undefined,
     subsystems,
     notes: notes.length ? notes : undefined,
     source: { kind: "SIMULATION", confidence: 0.8 },

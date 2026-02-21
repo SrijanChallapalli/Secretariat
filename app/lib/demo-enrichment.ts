@@ -9,6 +9,7 @@ import type {
   BreedingPick,
   ValuationDriver,
 } from "@/data/mockHorses";
+import { NEWBORN_THRESHOLD_MS } from "../../shared/constants";
 
 export interface DemoProfile {
   changePct: number;
@@ -45,7 +46,7 @@ function generateValuationHistory(
 
   for (let i = 0; i < months; i++) {
     const d = new Date(2026, 1 - (months - 1 - i), 1);
-    const t = i / (months - 1);
+    const t = months > 1 ? i / (months - 1) : 1;
     const base = startValue + (currentValue - startValue) * t;
     const noise = base * 0.03 * Math.sin(i * 2.3 + currentValue * 0.001);
     points.push({
@@ -326,6 +327,36 @@ const PROFILES: Record<string, DemoProfile> = {
   },
 };
 
+function ageInMs(birthTimestamp: bigint): number {
+  if (birthTimestamp <= 0n) return Infinity;
+  return Date.now() - Number(birthTimestamp) * 1000;
+}
+
+function newbornProfile(tokenId: number, name: string): DemoProfile {
+  const seed = tokenId * 7 + name.length * 13;
+  return {
+    changePct: 0,
+    totalWins: 0,
+    gradeWins: 0,
+    injuries: 0,
+    soundness: 3,
+    grade: "—",
+    majorResult: "N/A — foal",
+    stewardNote: "Newborn. Awaiting first evaluation.",
+    lastResult: "Awaiting debut",
+    sireLabel: "Founder",
+    damLabel: "Founder",
+    dnaHash: `0x${Array.from({ length: 64 }, (_, i) => ((seed * 3 + i * 7) % 16).toString(16)).join("")}`,
+    valuationDrivers: [
+      { name: "Pedigree Potential", impactPct: 5 + (seed % 4) },
+      { name: "Trait Outlook", impactPct: 3 + (seed % 3) },
+      { name: "Unraced Discount", impactPct: -(2 + (seed % 3)) },
+    ],
+    oracleEvents: [],
+    breedingPicks: [],
+  };
+}
+
 function fallbackProfile(tokenId: number, name: string): DemoProfile {
   const seed = tokenId * 7 + name.length * 13;
   const wins = 2 + (seed % 10);
@@ -380,10 +411,25 @@ export function getDemoEnrichment(
   tokenId: number,
   name: string,
   currentValuation: number,
+  birthTimestamp: bigint = 0n,
 ): DemoEnrichment {
-  const profile = PROFILES[name] ?? fallbackProfile(tokenId, name);
+  const isNewborn =
+    !(name in PROFILES) && ageInMs(birthTimestamp) < NEWBORN_THRESHOLD_MS;
+
+  const profile = isNewborn
+    ? newbornProfile(tokenId, name)
+    : (PROFILES[name] ?? fallbackProfile(tokenId, name));
+
+  const months = isNewborn
+    ? Math.max(1, Math.ceil(ageInMs(birthTimestamp) / (30.44 * 24 * 60 * 60 * 1000)))
+    : 12;
+
   return {
     ...profile,
-    valuationOverTime: generateValuationHistory(currentValuation, profile.changePct * 3),
+    valuationOverTime: generateValuationHistory(
+      currentValuation,
+      profile.changePct * 3,
+      months,
+    ),
   };
 }

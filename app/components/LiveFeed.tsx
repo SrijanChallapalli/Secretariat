@@ -95,6 +95,9 @@ const injuryEvent = parseAbiItem(
 const newsEvent = parseAbiItem(
   "event NewsReported(uint256 indexed tokenId, uint16 sentimentBps)"
 );
+const valuationCommittedEvent = parseAbiItem(
+  "event ValuationCommitted(uint256 indexed tokenId, uint8 indexed eventType, bytes32 indexed eventHash, uint256 newValuationADI, bytes32 ogRootHash)"
+);
 const bredEvent = parseAbiItem(
   "event Bred(uint256 indexed stallionId, uint256 indexed mareId, uint256 indexed offspringId)"
 );
@@ -171,15 +174,19 @@ export default function LiveFeed() {
         const newEvents: FeedEvent[] = [];
 
         if (addresses.horseOracle && addresses.horseOracle !== "0x0000000000000000000000000000000000000000") {
-          const [raceLogs, injuryLogs, newsLogs] = await Promise.all([
+          const [raceLogs, injuryLogs, newsLogs, vcLogs] = await Promise.all([
             client.getLogs({ address: addresses.horseOracle, event: raceResultEvent, fromBlock, toBlock: currentBlock }).catch(() => []),
             client.getLogs({ address: addresses.horseOracle, event: injuryEvent, fromBlock, toBlock: currentBlock }).catch(() => []),
             client.getLogs({ address: addresses.horseOracle, event: newsEvent, fromBlock, toBlock: currentBlock }).catch(() => []),
+            client.getLogs({ address: addresses.horseOracle, event: valuationCommittedEvent, fromBlock, toBlock: currentBlock }).catch(() => []),
           ]);
+
+          const seenTxTokenPairs = new Set<string>();
 
           for (const log of raceLogs) {
             const args = log.args;
             const placing = Number(args.placing ?? 0);
+            seenTxTokenPairs.add(`${log.transactionHash}-${Number(args.tokenId ?? 0)}`);
             newEvents.push({
               id: `race-${log.transactionHash}-${log.logIndex}`,
               type: "oracle",
@@ -191,6 +198,7 @@ export default function LiveFeed() {
             });
           }
           for (const log of injuryLogs) {
+            seenTxTokenPairs.add(`${log.transactionHash}-${Number(log.args.tokenId ?? 0)}`);
             newEvents.push({
               id: `injury-${log.transactionHash}-${log.logIndex}`,
               type: "oracle",
@@ -202,6 +210,7 @@ export default function LiveFeed() {
             });
           }
           for (const log of newsLogs) {
+            seenTxTokenPairs.add(`${log.transactionHash}-${Number(log.args.tokenId ?? 0)}`);
             newEvents.push({
               id: `news-${log.transactionHash}-${log.logIndex}`,
               type: "oracle",
@@ -210,6 +219,35 @@ export default function LiveFeed() {
               detail: `Sentiment ${Number(log.args.sentimentBps ?? 0) / 100}%`,
               timestamp: Date.now(),
               tokenId: Number(log.args.tokenId ?? 0),
+            });
+          }
+
+          const EVENT_TYPE_LABELS: Record<number, { kind: EventKind; label: string }> = {
+            0: { kind: "race", label: "Race Revaluation" },
+            1: { kind: "injury", label: "Injury Revaluation" },
+            2: { kind: "news", label: "News Revaluation" },
+            3: { kind: "news", label: "Biometric Revaluation" },
+          };
+
+          for (const log of vcLogs) {
+            const args = log.args;
+            const tokenId = Number(args.tokenId ?? 0);
+            const key = `${log.transactionHash}-${tokenId}`;
+            if (seenTxTokenPairs.has(key)) continue;
+
+            const eventTypeNum = Number(args.eventType ?? 2);
+            const meta = EVENT_TYPE_LABELS[eventTypeNum] ?? EVENT_TYPE_LABELS[2];
+            const newVal = args.newValuationADI ?? 0n;
+            const isRaceWin = eventTypeNum === 0;
+
+            newEvents.push({
+              id: `vc-${log.transactionHash}-${log.logIndex}`,
+              type: "oracle",
+              eventKind: isRaceWin ? "race_winner" : meta.kind,
+              label: `${meta.label} #${tokenId}`,
+              detail: `New valuation: ${formatEther(newVal)} ADI`,
+              timestamp: Date.now(),
+              tokenId,
             });
           }
         }

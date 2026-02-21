@@ -14,9 +14,12 @@ import {
   SUBSYSTEM_BG,
   SUBSYSTEM_TEXT,
 } from "@/components/biometric/subsystemColors";
+import { NEWBORN_THRESHOLD_MS } from "../../../shared/constants";
 
 interface BiometricScanSectionProps {
   tokenId: number;
+  birthTimestamp?: bigint;
+  isOwner?: boolean;
 }
 
 const LABEL_COLORS: Record<BiometricLabel, string> = {
@@ -39,11 +42,13 @@ function SubsystemCard({
   innerRef,
   selected,
   onClick,
+  limited,
 }: {
   sub: BiometricSubsystem;
   innerRef?: (el: HTMLDivElement | null) => void;
   selected?: boolean;
   onClick?: () => void;
+  limited?: boolean;
 }) {
   const subColor = SUBSYSTEM_COLORS[sub.id];
   return (
@@ -77,37 +82,58 @@ function SubsystemCard({
       <p className={`text-[10px] font-medium mb-1 ${LABEL_COLORS[sub.label]}`}>
         {sub.label}
       </p>
-      <ul className="space-y-0.5">
-        {sub.reasons.map((r, i) => (
-          <li key={i} className="text-[11px] text-muted-foreground leading-tight">
-            {r}
-          </li>
-        ))}
-      </ul>
-      {sub.flags?.length ? (
-        <div className="mt-1.5 flex gap-1 flex-wrap">
-          {sub.flags.map((f) => (
-            <span
-              key={f}
-              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-prestige-gold"
-            >
-              {f}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      {limited ? (
+        <p className="text-[10px] text-muted-foreground/50 italic">
+          Own shares to view detailed analysis
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-0.5">
+            {sub.reasons.map((r, i) => (
+              <li key={i} className="text-[11px] text-muted-foreground leading-tight">
+                {r}
+              </li>
+            ))}
+          </ul>
+          {sub.flags?.length ? (
+            <div className="mt-1.5 flex gap-1 flex-wrap">
+              {sub.flags.map((f) => (
+                <span
+                  key={f}
+                  className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-prestige-gold"
+                >
+                  {f}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
 
-export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
+function isUnderSixMonths(birthTimestamp?: bigint): boolean {
+  if (!birthTimestamp || birthTimestamp <= 0n) return false;
+  const birthMs = Number(birthTimestamp) * 1000;
+  return Date.now() - birthMs < NEWBORN_THRESHOLD_MS;
+}
+
+export function BiometricScanSection({ tokenId, birthTimestamp, isOwner }: BiometricScanSectionProps) {
+  const limited = !isOwner;
   const [scan, setScan] = useState<BiometricScanResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMarker, setSelectedMarker] = useState<BiometricSubsystemId | null>(null);
   const subsystemCardsRef = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const underage = isUnderSixMonths(birthTimestamp);
+
   useEffect(() => {
+    if (underage) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -124,13 +150,27 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
     return () => {
       cancelled = true;
     };
-  }, [tokenId]);
+  }, [tokenId, underage]);
 
   if (loading) {
     return (
       <div className="rounded-lg border border-sidebar-border/60 bg-card p-5 animate-pulse">
         <div className="h-4 w-48 rounded bg-white/10 mb-4" />
         <div className="h-32 rounded bg-white/5" />
+      </div>
+    );
+  }
+
+  if (underage) {
+    return (
+      <div className="rounded-lg border border-sidebar-border/60 bg-card p-5">
+        <h3 className="text-xs font-semibold tracking-[0.2em] text-prestige-gold uppercase mb-2">
+          BIOMETRIC SCAN
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Biometric scans are not available for horses under 6 months old. Data
+          collection begins once the horse reaches sufficient physical maturity.
+        </p>
       </div>
     );
   }
@@ -202,10 +242,39 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
               </div>
             </div>
           </div>
-          {/* Engine version - top right */}
-          <span className="absolute top-3 right-3 z-20 text-[9px] font-mono text-muted-foreground/80">
-            {scan.engineVersion}
-          </span>
+          {/* Risk Score badge + Engine version - top right */}
+          <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1.5">
+            <div
+              className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider border ${
+                scan.riskScore <= 2
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                  : scan.riskScore <= 4
+                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                    : "bg-red-500/20 text-red-400 border-red-500/40 animate-pulse"
+              }`}
+            >
+              RISK {scan.riskScore}/6
+            </div>
+            {scan.minerDamage != null && scan.minerDamage > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-card/90 border border-white/10">
+                <span className="text-[9px] text-muted-foreground">Miner&apos;s D</span>
+                <span
+                  className={`text-[10px] font-mono font-bold ${
+                    scan.minerDamage >= 0.8
+                      ? "text-red-400"
+                      : scan.minerDamage >= 0.5
+                        ? "text-amber-400"
+                        : "text-emerald-400"
+                  }`}
+                >
+                  {scan.minerDamage.toFixed(3)}
+                </span>
+              </div>
+            )}
+            <span className="text-[9px] font-mono text-muted-foreground/80">
+              {scan.engineVersion}
+            </span>
+          </div>
           <BiometricModelViewer
             scan={scan}
             tokenId={tokenId}
@@ -230,13 +299,14 @@ export function BiometricScanSection({ tokenId }: BiometricScanSectionProps) {
               innerRef={(el) => {
                 subsystemCardsRef.current[sub.id] = el;
               }}
+              limited={limited}
             />
           ))}
         </div>
       </div>
 
-      {/* Notes */}
-      {scan.notes?.length ? (
+      {/* Notes — only visible to shareholders */}
+      {!limited && scan.notes?.length ? (
         <div className="space-y-1 p-3 pt-2 border-t border-white/5">
           {scan.notes.map((note, i) => (
             <p

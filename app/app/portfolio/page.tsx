@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useAccount, useChainId, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, useChainId, useReadContract, useReadContracts, useWriteContract, useBlockNumber } from "wagmi";
 import { parseAbi } from "viem";
 import { addresses, abis } from "@/lib/contracts";
 import Link from "next/link";
@@ -15,7 +15,9 @@ import type {
   RevenueBreakdownItem,
 } from "@/data/mockPortfolio";
 import { MAX_HORSE_ID_TO_FETCH, isOnChainHorse } from "@/lib/on-chain-horses";
-import { parseRawHorseData } from "@/lib/on-chain-mapping";
+import { parseRawHorseData, trackChangePct, demoChangePct } from "@/lib/on-chain-mapping";
+import { formatEther } from "viem";
+import { isDemoMode, getDemoEnrichment } from "@/lib/demo-enrichment";
 
 const vaultAbi = parseAbi([
   "function claimableFor(address) view returns (uint256)",
@@ -54,6 +56,7 @@ export default function PortfolioPage() {
     }
   }, [searchParams]);
   const { writeContract } = useWriteContract();
+  const { data: latestBlock } = useBlockNumber({ watch: true });
 
   const { data: balances, isLoading: balLoading } = useReadContract({
     address: addresses.adiToken,
@@ -62,7 +65,6 @@ export default function PortfolioPage() {
     args: address ? [address] : undefined,
   });
 
-  // First find which horses exist (getHorseData doesn't revert for non-existent tokens)
   const horseDataCalls = Array.from({ length: MAX_HORSE_ID_TO_FETCH }, (_, i) => ({
     address: addresses.horseINFT,
     abi: abis.HorseINFT,
@@ -71,6 +73,7 @@ export default function PortfolioPage() {
   }));
   const { data: allHorseData, refetch: refetchHorses } = useReadContracts({
     contracts: horseDataCalls as any,
+    query: { structuralSharing: false },
   });
 
   const existingHorseIds =
@@ -92,7 +95,15 @@ export default function PortfolioPage() {
       : [];
   const { data: horseOwnership, refetch: refetchOwnership } = useReadContracts({
     contracts: ownerOfCalls as any,
+    query: { structuralSharing: false },
   });
+
+  useEffect(() => {
+    if (latestBlock) {
+      refetchHorses();
+      refetchOwnership();
+    }
+  }, [latestBlock, refetchHorses, refetchOwnership]);
 
   const myHorses =
     horseOwnership
@@ -204,17 +215,33 @@ export default function PortfolioPage() {
 
   const horseNames: Record<number, string> = {};
   const horseValuations: Record<number, bigint> = {};
+  const horsePnl: Record<number, number> = {};
+  const demo = isDemoMode();
   allHorseData?.forEach((res, i) => {
     if (res?.status === "success" && res.result) {
       const raw = parseRawHorseData(res.result);
-      horseNames[i] = raw?.name?.trim() || `Horse #${i}`;
-      if (raw) horseValuations[i] = raw.valuationADI;
+      const name = raw?.name?.trim() || `Horse #${i}`;
+      horseNames[i] = name;
+      if (raw) {
+        horseValuations[i] = raw.valuationADI;
+        const valNum = Number(formatEther(raw.valuationADI));
+        const livePct = trackChangePct(i, valNum);
+        const enrichment = demo ? getDemoEnrichment(i, name, valNum, raw.birthTimestamp) : null;
+        horsePnl[i] = livePct !== 0 ? livePct : (enrichment?.changePct ?? 0);
+      }
     }
   });
   if (fallbackOwnedMintedId != null && fallbackData?.[0]?.status === "success" && fallbackData[0].result) {
     const raw = parseRawHorseData(fallbackData[0].result);
-    horseNames[fallbackOwnedMintedId] = raw?.name?.trim() || `Horse #${fallbackOwnedMintedId}`;
-    if (raw) horseValuations[fallbackOwnedMintedId] = raw.valuationADI;
+    const name = raw?.name?.trim() || `Horse #${fallbackOwnedMintedId}`;
+    horseNames[fallbackOwnedMintedId] = name;
+    if (raw) {
+      horseValuations[fallbackOwnedMintedId] = raw.valuationADI;
+      const valNum = Number(formatEther(raw.valuationADI));
+      const livePct = trackChangePct(fallbackOwnedMintedId, valNum);
+      const enrichment = demo ? getDemoEnrichment(fallbackOwnedMintedId, name, valNum, raw.birthTimestamp) : null;
+      horsePnl[fallbackOwnedMintedId] = livePct !== 0 ? livePct : (enrichment?.changePct ?? 0);
+    }
   }
 
   const VAULT_CALLS_PER = 3;
@@ -283,7 +310,7 @@ export default function PortfolioPage() {
       shares: r.balance,
       totalShares: r.totalShares,
       value: proportionalValue,
-      pnlPct: 0,
+      pnlPct: horsePnl[r.horseId] ?? 0,
       claimable: r.claimable,
       isOwnerOnly: false,
     };
@@ -299,7 +326,7 @@ export default function PortfolioPage() {
       shares: DEFAULT_TOTAL_SHARES,
       totalShares: DEFAULT_TOTAL_SHARES,
       value: horseValuations[id] ?? 0n,
-      pnlPct: 0,
+      pnlPct: horsePnl[id] ?? 0,
       claimable: 0n,
       isOwnerOnly: true,
     }));
@@ -313,12 +340,15 @@ export default function PortfolioPage() {
 
   const totalPortfolioValue = holdings.reduce((acc, h) => acc + h.value, 0n);
 
+  const avgPnl = holdings.length > 0
+    ? holdings.reduce((sum, h) => sum + h.pnlPct, 0) / holdings.length
+    : 0;
   const kpis: PortfolioKPIs = {
     totalValue: Number(totalPortfolioValue) / 1e18,
-    totalValueDeltaPct: 0,
+    totalValueDeltaPct: avgPnl,
     claimableRevenue: Number(totalClaimable) / 1e18,
     activeRights: vaults.length,
-    avgReturn: 0,
+    avgReturn: avgPnl,
     avgReturnDeltaPct: 0,
   };
 

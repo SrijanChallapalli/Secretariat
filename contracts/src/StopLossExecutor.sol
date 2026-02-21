@@ -7,8 +7,9 @@ import "./HorseSyndicateVault.sol";
 import "./HorseSyndicateVaultFactory.sol";
 import "./AgentRiskConfig.sol";
 
-/// @title StopLossExecutor - Autonomous stop-loss execution when risk parameters are breached.
+/// @title StopLossExecutor - Autonomous stop-loss and Lazarus Protocol execution.
 ///        The AI agent calls this after a biometric/oracle event triggers a valuation drop.
+///        Includes executeLazarusProtocol() for Level 6 biometric emergencies.
 contract StopLossExecutor is AccessControl {
     bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
 
@@ -16,7 +17,6 @@ contract StopLossExecutor is AccessControl {
     HorseSyndicateVaultFactory public vaultFactory;
     AgentRiskConfig public riskConfig;
 
-    // Cooldown to prevent repeated triggers
     mapping(address => uint256) public lastTriggerTime;
     uint256 public cooldownPeriod = 1 hours;
 
@@ -27,6 +27,7 @@ contract StopLossExecutor is AccessControl {
         string  reason
     );
     event EmergencyRetireTriggered(address indexed vault, uint256 indexed horseTokenId, uint8 healthScore);
+    event LazarusProtocolExecuted(address indexed vault, uint256 indexed horseTokenId);
     event CooldownUpdated(uint256 newCooldown);
 
     constructor(address _horseNFT, address _vaultFactory, address _riskConfig) {
@@ -37,8 +38,6 @@ contract StopLossExecutor is AccessControl {
         riskConfig = AgentRiskConfig(_riskConfig);
     }
 
-    /// @notice Check and execute stop-loss if valuation floor is breached.
-    ///         Called by the AI agent after a valuation update.
     function executeStopLoss(uint256 horseTokenId) external onlyRole(EXECUTOR_ROLE) {
         address vaultAddr = vaultFactory.vaultForHorse(horseTokenId);
         require(vaultAddr != address(0), "No vault for horse");
@@ -56,7 +55,6 @@ contract StopLossExecutor is AccessControl {
         emit StopLossTriggered(vaultAddr, horseTokenId, currentVal, "VALUATION_FLOOR");
     }
 
-    /// @notice Check and execute stop-loss if drawdown from peak is breached
     function executeDrawdownStop(uint256 horseTokenId) external onlyRole(EXECUTOR_ROLE) {
         address vaultAddr = vaultFactory.vaultForHorse(horseTokenId);
         require(vaultAddr != address(0), "No vault for horse");
@@ -73,7 +71,6 @@ contract StopLossExecutor is AccessControl {
         emit StopLossTriggered(vaultAddr, horseTokenId, currentVal, "MAX_DRAWDOWN");
     }
 
-    /// @notice Trigger forced retirement if health score falls below threshold
     function executeHealthRetire(uint256 horseTokenId, uint8 healthScore) external onlyRole(EXECUTOR_ROLE) {
         address vaultAddr = vaultFactory.vaultForHorse(horseTokenId);
         require(vaultAddr != address(0), "No vault for horse");
@@ -84,7 +81,25 @@ contract StopLossExecutor is AccessControl {
         emit EmergencyRetireTriggered(vaultAddr, horseTokenId, healthScore);
     }
 
-    /// @notice Update peak valuation tracking (should be called after positive valuation updates)
+    /// @notice Trigger Lazarus Protocol on a vault when stride anomaly / Level 6 risk detected.
+    ///         Freezes all secondary trading to prevent information asymmetry dumping.
+    /// @param strideDeltaBps Stride deviation in basis points from the biometric oracle
+    function executeLazarusProtocol(uint256 horseTokenId, uint16 strideDeltaBps) external onlyRole(EXECUTOR_ROLE) {
+        address vaultAddr = vaultFactory.vaultForHorse(horseTokenId);
+        require(vaultAddr != address(0), "No vault for horse");
+
+        bool anomaly = riskConfig.isStrideAnomalyDetected(vaultAddr, strideDeltaBps);
+        require(anomaly, "No stride anomaly detected");
+
+        HorseSyndicateVault vault = HorseSyndicateVault(vaultAddr);
+        require(!vault.frozen(), "Already frozen");
+
+        vault.triggerLazarus();
+        horseNFT.setRetired(horseTokenId, true);
+
+        emit LazarusProtocolExecuted(vaultAddr, horseTokenId);
+    }
+
     function recordPeakValuation(uint256 horseTokenId) external onlyRole(EXECUTOR_ROLE) {
         address vaultAddr = vaultFactory.vaultForHorse(horseTokenId);
         require(vaultAddr != address(0), "No vault for horse");

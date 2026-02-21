@@ -8,7 +8,7 @@ export { calculateScarcityPremium } from "../../shared/scarcity.js";
 export interface HorseValuationInput {
   name?: string;
   age?: number;
-  sex?: "male" | "female";
+  sex?: "male" | "female" | "gelding";
   status?: "active" | "retired" | "deceased";
   speed?: number;
   stamina?: number;
@@ -79,9 +79,13 @@ function calculate(
     (horse.totalEarnings ?? 0) * 2 +
     winRate * 100000 +
     (horse.speed ?? 0) * 1000;
-  const offspringSuccessBonus = (horse.offspringWins ?? 0) * 5000;
-  let breedingValue =
-    (horse.pedigreeScore ?? 0) * 2000 + offspringSuccessBonus;
+  // Gelding Disconnect: castrated males have $0 breeding value.
+  // Parent performance no longer impacts the gelding's IBV.
+  const isGelding = horse.sex === "gelding";
+  const offspringSuccessBonus = isGelding ? 0 : (horse.offspringWins ?? 0) * 5000;
+  let breedingValue = isGelding
+    ? 0
+    : (horse.pedigreeScore ?? 0) * 2000 + offspringSuccessBonus;
   if (horse.sex === "male") breedingValue *= 1.2;
 
   const status = horse.status ?? "active";

@@ -121,6 +121,76 @@ function applyXFactor(
 }
 
 // ---------------------------------------------------------------------------
+// Black-Type multiplier — parent wins at graded stakes boost offspring breeding value
+// ---------------------------------------------------------------------------
+
+function applyBlackType(
+  features: FeatureVector,
+  breakdown: Record<string, number>,
+  value: number,
+): { value: number; breakdown: Record<string, number> } {
+  const level = features.blackTypeLevel ?? 0;
+  if (level === 0 || features.sex === "gelding") return { value, breakdown };
+
+  // Graded = 1.15x, Listed = 1.08x, Stakes placed = 1.04x
+  let blackTypeMultiplier = 1.0;
+  if (level >= 3) blackTypeMultiplier = 1.15;
+  else if (level === 2) blackTypeMultiplier = 1.08;
+  else if (level === 1) blackTypeMultiplier = 1.04;
+
+  const breedingValue = breakdown.breedingValue ?? 0;
+  const total = value;
+  if (total > 0 && breedingValue > 0) {
+    const breedingFraction = breedingValue / total;
+    const boost = breedingFraction * (blackTypeMultiplier - 1);
+    value = value * (1 + boost);
+  }
+
+  return {
+    value,
+    breakdown: { ...breakdown, blackTypeMultiplier },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Intrinsic Biological Value (IBV) — distinct genomic+telemetric metric
+// ---------------------------------------------------------------------------
+
+function computeIBV(
+  features: FeatureVector,
+  breakdown: Record<string, number>,
+): Record<string, number> {
+  // For geldings, IBV is purely racing-based (no breeding component)
+  if (features.sex === "gelding") {
+    return { ...breakdown, ibv: breakdown.racingValue ?? 0 };
+  }
+
+  const pedigreeBase = (features.pedigreeScore ?? 0) * 200;
+  const dosageComponent = breakdown.dosageIndex != null
+    ? (breakdown.dosageIndex <= 4.0 ? 1.0 : 0.85) * pedigreeBase * 0.3
+    : 0;
+  const cdComponent = breakdown.centerOfDistribution != null
+    ? (1 + breakdown.centerOfDistribution * 0.1) * pedigreeBase * 0.1
+    : 0;
+  const xFactor = (breakdown.xFactorMultiplier ?? 1.0);
+  const blackType = (breakdown.blackTypeMultiplier ?? 1.0);
+
+  // Un-raced vs. racing: for un-raced, IBV is purely genomic
+  const hasRaced = (features.totalRaces ?? 0) > 0;
+  let ibv: number;
+
+  if (hasRaced) {
+    const genomicBase = (pedigreeBase + dosageComponent + cdComponent) * xFactor * blackType;
+    const racingSignal = breakdown.racingValue ?? 0;
+    ibv = genomicBase * 0.4 + racingSignal * 0.6;
+  } else {
+    ibv = (pedigreeBase + dosageComponent + cdComponent) * xFactor * blackType;
+  }
+
+  return { ...breakdown, ibv };
+}
+
+// ---------------------------------------------------------------------------
 // FormulaEngine
 // ---------------------------------------------------------------------------
 
@@ -133,12 +203,15 @@ export class FormulaEngine implements ValuationEngine {
     flat = dosageResult.breakdown;
     const xFactorResult = applyXFactor(features, flat, dosageResult.value);
     flat = xFactorResult.breakdown;
+    const blackTypeResult = applyBlackType(features, flat, xFactorResult.value);
+    flat = blackTypeResult.breakdown;
+    flat = computeIBV(features, flat);
 
     return {
-      value: xFactorResult.value,
+      value: blackTypeResult.value,
       confidence: 1.0,
       breakdown: flat,
-      engineVersion: "formula-v1",
+      engineVersion: "formula-v2",
     };
   }
 
@@ -150,17 +223,24 @@ export class FormulaEngine implements ValuationEngine {
   ): ValuationResult {
     const input = toInput(features);
     const result = runValuation(input, marketData, eventType, eventData);
-    const flat = flattenBreakdown(result.breakdown);
+    let flat = flattenBreakdown(result.breakdown);
+    const dosageResult = applyDosage(features, flat, result.value);
+    flat = dosageResult.breakdown;
+    const xFactorResult = applyXFactor(features, flat, dosageResult.value);
+    flat = xFactorResult.breakdown;
+    const blackTypeResult = applyBlackType(features, flat, xFactorResult.value);
+    flat = blackTypeResult.breakdown;
+    flat = computeIBV(features, flat);
     return {
-      value: result.value,
+      value: blackTypeResult.value,
       confidence: 1.0,
       breakdown: flat,
-      engineVersion: "formula-v1",
+      engineVersion: "formula-v2",
     };
   }
 
   version(): string {
-    return "formula-v1";
+    return "formula-v2";
   }
 }
 

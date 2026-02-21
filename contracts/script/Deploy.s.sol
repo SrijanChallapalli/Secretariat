@@ -9,6 +9,7 @@ import "../src/BreedingMarketplace.sol";
 import "../src/HorseOracle.sol";
 import "../src/HorseSyndicateVault.sol";
 import "../src/HorseSyndicateVaultFactory.sol";
+import "../src/VaultDeployer.sol";
 import "../src/BreedingAdvisorINFT.sol";
 import "../src/AgentExecutor.sol";
 import "../src/KYCRegistry.sol";
@@ -38,14 +39,24 @@ contract DeployScript is Script {
         );
         horseNFT.setBreedingMarketplace(address(marketplace));
 
-        // Horse Oracle (biometric-capable)
-        HorseOracle horseOracle = new HorseOracle(address(horseNFT));
-        horseNFT.setHorseOracle(address(horseOracle));
-
-        // Vault factory (with KYC)
+        // Vault deployer + factory (split to stay under EIP-170 bytecode limit)
+        address deployer = vm.addr(deployerPrivateKey);
+        VaultDeployer vDeployer = new VaultDeployer();
         HorseSyndicateVaultFactory vaultFactory = new HorseSyndicateVaultFactory(
-            address(adi), address(horseNFT), address(kycRegistry)
+            address(adi), address(horseNFT), address(kycRegistry),
+            deployer, // protocolTreasury (deployer for now)
+            300,      // 3% origination fee
+            1000      // 10% yield skim
         );
+        vDeployer.setFactory(address(vaultFactory));
+        vaultFactory.setVaultDeployer(address(vDeployer));
+
+        // Horse Oracle (biometric-capable, with access fees and vault factory)
+        HorseOracle horseOracle = new HorseOracle(
+            address(horseNFT), address(adi), deployer,
+            address(vaultFactory), 0
+        );
+        horseNFT.setHorseOracle(address(horseOracle));
 
         // Agent iNFT & executor
         BreedingAdvisorINFT agentINFT = new BreedingAdvisorINFT();
@@ -62,7 +73,6 @@ contract DeployScript is Script {
         );
 
         // Agent wallet (ERC-4337 AA) — uses deployer as initial signer and a placeholder entrypoint
-        address deployer = vm.addr(deployerPrivateKey);
         AgentWallet agentWallet = new AgentWallet(
             address(0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789), // canonical ERC-4337 EntryPoint v0.6
             deployer
@@ -76,6 +86,7 @@ contract DeployScript is Script {
         console.log("HorseINFT", address(horseNFT));
         console.log("BreedingMarketplace", address(marketplace));
         console.log("HorseOracle", address(horseOracle));
+        console.log("VaultDeployer", address(vDeployer));
         console.log("HorseSyndicateVaultFactory", address(vaultFactory));
         console.log("BreedingAdvisorINFT", address(agentINFT));
         console.log("AgentExecutor", address(agentExecutor));

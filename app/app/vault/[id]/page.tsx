@@ -5,7 +5,6 @@ import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { addresses, abis } from "@/lib/contracts";
 import { formatEther } from "viem";
 import { useState } from "react";
-import Link from "next/link";
 import { parseRawHorseData } from "@/lib/on-chain-mapping";
 
 export default function VaultPage() {
@@ -249,13 +248,6 @@ export default function VaultPage() {
         </section>
       )}
 
-      {/* Link to risk board */}
-      <Link
-        href="/risk"
-        className="inline-block text-xs text-prestige-gold hover:underline"
-      >
-        Configure risk parameters on the DeFAI Risk Board →
-      </Link>
     </div>
   );
 }

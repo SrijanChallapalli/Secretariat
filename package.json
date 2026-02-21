@@ -23,6 +23,8 @@
     "seed:local": "RPC_URL=http://127.0.0.1:8545 CHAIN_ID_0G=31337 LOCAL_TESTING=true tsx scripts/seed-demo.ts",
     "seed:minimal": "tsx scripts/seed-minimal.ts",
     "seed:more": "RPC_URL=http://127.0.0.1:8545 CHAIN_ID_0G=31337 LOCAL_TESTING=true tsx scripts/seed-more-horses.ts",
+    "seed:og": "RPC_URL=https://evmrpc-testnet.0g.ai RPC_0G=https://evmrpc-testnet.0g.ai CHAIN_ID_0G=16602 LOCAL_TESTING=false tsx scripts/seed-demo.ts",
+    "seed:more:og": "RPC_0G=https://evmrpc-testnet.0g.ai CHAIN_ID_0G=16602 LOCAL_TESTING=false tsx scripts/seed-more-horses.ts",
     "test:contracts": "cd contracts && forge test",
     "test:local": "node scripts/test-local.mjs",
     "demo:reset": "tsx scripts/demo-reset.ts",

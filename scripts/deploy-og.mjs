@@ -16,7 +16,8 @@ if (pk.length < 64) {
 }
 
 // Pass via env object to avoid leaking the key in shell command / error messages
+// --code-size-limit raised because HorseSyndicateVaultFactory slightly exceeds EIP-170 (embeds vault bytecode)
 execSync(
-  `cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url "${rpc}" --broadcast --with-gas-price 3000000000 --priority-gas-price 2000000000`,
-  { stdio: "inherit", cwd: process.cwd(), env: { ...process.env, DEPLOYER_PRIVATE_KEY: pk } }
+  `forge script script/Deploy.s.sol:DeployScript --rpc-url "${rpc}" --broadcast --with-gas-price 3000000000 --priority-gas-price 2000000000 --code-size-limit 30000`,
+  { stdio: "inherit", cwd: "contracts", env: { ...process.env, DEPLOYER_PRIVATE_KEY: pk } }
 );
