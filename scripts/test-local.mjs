@@ -50,9 +50,9 @@ function ensureEnv() {
 async function main() {
   log("Starting local test stack (Anvil + deploy + seed + dev)...");
 
-  // 1. Start Anvil
+  // 1. Start Anvil (--code-size-limit raises 24KB default to allow VaultDeployer ~24.8KB)
   log("Starting Anvil on 8545...");
-  const anvil = spawn("anvil", ["--port", "8545"], {
+  const anvil = spawn("anvil", ["--port", "8545", "--code-size-limit", "25600"], {
     cwd: ROOT,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -69,9 +69,9 @@ async function main() {
     log("Deploying contracts...");
     execSync("node scripts/deploy-local.mjs", { stdio: "inherit", cwd: ROOT });
 
-    // 3. Seed (minimal: 2 horses, 1 list, ADI)
-    log("Seeding minimal data (2 horses, 1 breeding list)...");
-    execSync("tsx scripts/seed-minimal.ts", { stdio: "inherit", cwd: ROOT, env: { ...process.env, RPC_URL: "http://127.0.0.1:8545", CHAIN_ID_0G: "31337", LOCAL_TESTING: "true" } });
+    // 3. Seed (demo: 8 horses, breeding listings, agent iNFT, ADI)
+    log("Seeding demo data (8 horses, breeding lists, agent iNFT)...");
+    execSync("tsx scripts/seed-demo.ts", { stdio: "inherit", cwd: ROOT, env: { ...process.env, RPC_URL: "http://127.0.0.1:8545", CHAIN_ID_0G: "31337", LOCAL_TESTING: "true" } });
 
     // 4. Start dev (server + app)
     log("Starting dev server + app...");

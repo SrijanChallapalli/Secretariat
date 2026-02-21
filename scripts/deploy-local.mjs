@@ -27,7 +27,7 @@ console.log("Using deployer key:", pk === ANVIL_DEFAULT_PK ? "(Anvil default #0)
 
 try {
   execSync(
-    `cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url "${RPC}" --broadcast --non-interactive --with-gas-price 1000000000`,
+    `cd contracts && forge script script/Deploy.s.sol:DeployScript --rpc-url "${RPC}" --broadcast --non-interactive --legacy --with-gas-price 1000000000 --disable-code-size-limit`,
     {
       stdio: "inherit",
       cwd: ROOT,

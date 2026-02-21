@@ -72,7 +72,9 @@ async function main() {
   const wallet = createWalletClient({ account, chain, transport });
 
   const owner = account.address;
+  const OTHER_OWNER = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as `0x${string}`;
   console.log("Owner (deployer):", owner);
+  console.log("Other owner (Anvil #1):", OTHER_OWNER);
 
   // Mint ADI to owner
   await (wallet as any).writeContract({
@@ -83,34 +85,32 @@ async function main() {
   });
   console.log("Minted 1M ADI to owner");
 
-  // Mint 3 horses: 0 stallion (star), 1 mare, 2 stallion (value play)
-  // Names validated with validateHorseName():
-  //   "Galileos Edge" (13 chars, valid) ✓
-  //   "Storm Cat Lady" (14 chars, valid) ✓
-  //   "First Mission Colt" (18 chars exactly, valid) ✓
-  const h0 = encodeHorseData({ name: "Galileos Edge", traits: [85, 92, 78, 88, 95, 80, 90, 85], pedigreeScore: 9400, valuation: BigInt(8000e18), breedingAvailable: true });
-  const h1 = encodeHorseData({ name: "Storm Cat Lady", sireId: 0, traits: [88, 80, 82, 85, 90, 84, 78, 82], pedigreeScore: 8600, valuation: BigInt(4000e18), breedingAvailable: true });
-  const h2 = encodeHorseData({ name: "First Mission Colt", traits: [82, 85, 75, 90, 88, 82, 85, 78], pedigreeScore: 8200, valuation: BigInt(2500e18), breedingAvailable: true });
+  // 8 horses total: 4 owned by deployer (IDs 0-3), 4 owned by Anvil #1 (IDs 4-7)
+  // Stallions: 0, 2, 4, 6 — Mares: 1, 3, 5, 7
+  // Names validated with validateHorseName(): ≤18 chars, no digits, not protected
+  const horses = [
+    { data: encodeHorseData({ name: "Galileos Edge", traits: [85, 92, 78, 88, 95, 80, 90, 85], pedigreeScore: 9400, valuation: BigInt(8000e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "Storm Cat Lady", sireId: 0, traits: [88, 80, 82, 85, 90, 84, 78, 82], pedigreeScore: 8600, valuation: BigInt(4000e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "First Mission Colt", traits: [82, 85, 75, 90, 88, 82, 85, 78], pedigreeScore: 8200, valuation: BigInt(2500e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "Thunder Strike", traits: [90, 88, 75, 92, 85, 88, 82, 86], pedigreeScore: 9100, valuation: BigInt(6000e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "Midnight Runner", traits: [85, 90, 80, 87, 92, 85, 88, 84], pedigreeScore: 8800, valuation: BigInt(4500e18), breedingAvailable: true }), to: OTHER_OWNER },
+    { data: encodeHorseData({ name: "Golden Dawn", sireId: 0, damId: 1, traits: [82, 85, 78, 90, 88, 80, 85, 82], pedigreeScore: 8500, valuation: BigInt(3500e18), breedingAvailable: true }), to: OTHER_OWNER },
+    { data: encodeHorseData({ name: "Silver Bullet", traits: [88, 82, 72, 85, 90, 86, 80, 78], pedigreeScore: 8700, valuation: BigInt(4200e18), breedingAvailable: true }), to: OTHER_OWNER },
+    { data: encodeHorseData({ name: "Ocean Breeze", sireId: 0, damId: 1, traits: [80, 88, 85, 82, 90, 82, 78, 80], pedigreeScore: 8300, valuation: BigInt(2800e18), breedingAvailable: true }), to: OTHER_OWNER },
+  ];
 
-  const tx0 = await (wallet as any).writeContract({
-    address: horseAddr as `0x${string}`,
-    abi: abi.HorseINFT,
-    functionName: "mint",
-    args: [owner, "", h0.metadataHash, h0],
-  });
-  const tx1 = await (wallet as any).writeContract({
-    address: horseAddr as `0x${string}`,
-    abi: abi.HorseINFT,
-    functionName: "mint",
-    args: [owner, "", h1.metadataHash, h1],
-  });
-  const tx2 = await (wallet as any).writeContract({
-    address: horseAddr as `0x${string}`,
-    abi: abi.HorseINFT,
-    functionName: "mint",
-    args: [owner, "", h2.metadataHash, h2],
-  });
-  console.log("Minted horses 0, 1, 2. Tx:", tx0, tx1, tx2);
+  const txHashes: `0x${string}`[] = [];
+  for (let i = 0; i < horses.length; i++) {
+    const h = horses[i];
+    const tx = await (wallet as any).writeContract({
+      address: horseAddr as `0x${string}`,
+      abi: abi.HorseINFT,
+      functionName: "mint",
+      args: [h.to, "", h.data.metadataHash, h.data],
+    });
+    txHashes.push(tx);
+  }
+  console.log("Minted 8 horses (4 to owner, 4 to other). Tx:", ...txHashes);
   const isLocal = process.env.LOCAL_TESTING === "true" || process.env.RPC_URL?.includes("127.0.0.1");
   const pollMs = isLocal ? 100 : 4000;
   async function waitReceipt(hash: `0x${string}`, label: string) {
@@ -123,9 +123,9 @@ async function main() {
     }
     console.warn(`${label}: gave up waiting, continuing anyway`);
   }
-  await waitReceipt(tx0, "Horse 0");
-  await waitReceipt(tx1, "Horse 1");
-  await waitReceipt(tx2, "Horse 2");
+  for (let i = 0; i < txHashes.length; i++) {
+    await waitReceipt(txHashes[i], `Horse ${i}`);
+  }
 
   // KYC verify owner (required for purchaseBreedingRight)
   if (kycAddr) {
@@ -140,7 +140,7 @@ async function main() {
     console.warn("KYC_REGISTRY not set; breeding may fail with 'KYC required'");
   }
 
-  // List stallions 0 and 2 for breeding
+  // List stallions we own (0, 2) for breeding; stallions 4, 6 belong to other wallet
   await (wallet as any).writeContract({
     address: marketAddr as `0x${string}`,
     abi: abi.BreedingMarketplace,
@@ -153,7 +153,7 @@ async function main() {
     functionName: "list",
     args: [2n, BigInt(300e18), 5, false],
   });
-  console.log("Listed stallions 0 (500 ADI) and 2 (300 ADI)");
+  console.log("Listed stallions 0 (500 ADI), 2 (300 ADI)");
 
   if (agentAddr) {
     try {
@@ -169,7 +169,7 @@ async function main() {
     }
   }
 
-  console.log("Seed done. Owner can list/sell; use second wallet as Buyer to purchase breeding rights and breed.");
+  console.log("Seed done. 8 horses total: 4 owned by deployer, 4 by Anvil #1.");
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

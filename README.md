@@ -22,10 +22,10 @@ This starts a local chain, deploys contracts, seeds horses/listings, and runs th
 Manual steps (if you prefer):
 
 ```bash
-anvil &                # in another terminal
-npm run deploy:local   # deploy to Anvil
-npm run seed:local     # seed demo data
-npm run dev            # start app + server (set LOCAL_TESTING=true in .env)
+anvil --code-size-limit 25600 &   # VaultDeployer exceeds default 24KB
+npm run deploy:local             # deploy to Anvil
+npm run seed:local               # seed demo data
+npm run dev                      # start app + server (set LOCAL_TESTING=true in .env)
 ```
 
 ### Testnet deployment
