@@ -32,6 +32,8 @@ export interface FeatureConfig {
   damsireClasses: string[];
   sireTargetEncoding: Record<string, number>;
   damsireTargetEncoding: Record<string, number>;
+  /** Percentile curve of the training target, exported by train_xgboost.py. */
+  targetPercentiles?: { q: number[]; values: number[] };
 }
 
 let cachedModel: XGBModel | null = null;
@@ -66,7 +68,39 @@ function loadConfig(configPath: string): FeatureConfig {
     damsireClasses: raw.damsire_classes,
     sireTargetEncoding: raw.sire_target_encoding,
     damsireTargetEncoding: raw.damsire_target_encoding,
+    targetPercentiles: raw.target_percentiles,
   };
+}
+
+/**
+ * Strength of a raw GBP prediction on a 0-1 scale.
+ *
+ * Two properties of the target make the naive approaches fail:
+ *   - It is zero-inflated: the median horse earns nothing, so raw percentile
+ *     puts any positive prediction above the 50th percentile and crams every
+ *     good horse into the top few percent.
+ *   - It spans four orders of magnitude, so dividing by a constant saturates
+ *     at the cap for any moderately good horse.
+ *
+ * Interpolating on a log scale between two anchors taken from the exported
+ * percentile curve (p75 and p99 of the training population) keeps the response
+ * smooth and monotonic across the full quality range.
+ */
+export function mlSignalStrength(
+  valueGBP: number,
+  curve: { q: number[]; values: number[] },
+): number {
+  const at = (p: number) => {
+    const idx = curve.q.findIndex((x) => x >= p);
+    return curve.values[idx >= 0 ? idx : curve.values.length - 1];
+  };
+  const lo = at(0.75);
+  const hi = at(0.99);
+  if (!(hi > lo)) return 0.5;
+
+  const l = Math.log1p(Math.max(0, valueGBP));
+  const t = (l - Math.log1p(lo)) / (Math.log1p(hi) - Math.log1p(lo));
+  return Math.max(0, Math.min(1, t));
 }
 
 function predictTree(tree: TreeNode, features: number[]): number {

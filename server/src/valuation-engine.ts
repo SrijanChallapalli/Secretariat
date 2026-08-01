@@ -11,7 +11,7 @@ import {
   classifyDistance,
 } from "../../shared/dosage.js";
 import { detectXFactor, type PedigreeNode } from "../../shared/x-factor.js";
-import { XGBoostPredictor, type HorseInput } from "./xgboost-predictor.js";
+import { XGBoostPredictor, mlSignalStrength, type HorseInput } from "./xgboost-predictor.js";
 
 export type { FeatureVector, ValuationResult, ValuationEngine, MarketData };
 
@@ -289,6 +289,15 @@ function featuresToXGBInput(f: FeatureVector): HorseInput {
   };
 }
 
+/**
+ * Bounds on how far the ML signal may move a formula valuation. The bottom of
+ * the training population lands at MIN, the top at MAX. Kept deliberately
+ * narrow: the formula already prices wins, earnings and pedigree, so the model
+ * is a corrective signal rather than the dominant term.
+ */
+const ML_MULTIPLIER_MIN = 0.6;
+const ML_MULTIPLIER_MAX = 2.5;
+
 export class ModelEngine implements ValuationEngine {
   private formula = new FormulaEngine();
   private predictor: XGBoostPredictor | null = null;
@@ -314,13 +323,21 @@ export class ModelEngine implements ValuationEngine {
 
     const formulaResult = this.formula.predict(features, marketData);
 
-    // ML model predicts GBP prize earnings; formula produces ADI-scale values.
-    // Use the ML prediction as a relative signal: compute a multiplier from the
-    // ML-predicted earning power (median training set is ~£2,500) and apply it
-    // to the formula base, clamped to a reasonable range.
-    const mlMedian = 2500;
-    const mlRatio = Math.max(0.1, Math.min(10, mlValueGBP / mlMedian));
-    const adjustedValue = formulaResult.value * (0.4 + 0.6 * mlRatio);
+    // The ML model predicts GBP prize earnings; the formula produces ADI-scale
+    // values. Convert the prediction into "how good is this horse relative to
+    // the training population" and use that as a bounded multiplier.
+    //
+    // Dividing by a single constant does not work here: prize money is
+    // zero-inflated (median GBP 0) and spans four orders of magnitude, so a
+    // linear ratio saturates at its cap for any moderately good horse and
+    // throws away the model's ranking exactly where it matters most.
+    // mlSignalStrength interpolates on a log scale between anchors taken from
+    // the training distribution, which stays monotonic across the full range.
+    const curve = this.predictor.getConfig().targetPercentiles;
+    const strength = curve ? mlSignalStrength(mlValueGBP, curve) : 0.5;
+    const mlMultiplier =
+      ML_MULTIPLIER_MIN + strength * (ML_MULTIPLIER_MAX - ML_MULTIPLIER_MIN);
+    const adjustedValue = formulaResult.value * mlMultiplier;
 
     return {
       value: adjustedValue,
@@ -328,7 +345,8 @@ export class ModelEngine implements ValuationEngine {
       breakdown: {
         ...formulaResult.breakdown,
         mlPredictionGBP: mlValueGBP,
-        mlRatio,
+        mlSignalStrength: strength,
+        mlMultiplier,
         formulaPrediction: formulaResult.value,
       },
       engineVersion: `model-v1-xgb-${this.predictor.treeCount()}t`,
