@@ -108,6 +108,41 @@ contract RiskScoreTest is Test, ERC721Holder {
         assertEq(horseOracle.riskScores(horseTokenId), 6);
     }
 
+    function test_report_recovery_clears_injured_flag() public {
+        horseOracle.reportInjury(horseTokenId, 1500);
+        assertTrue(horseNFT.getHorseData(horseTokenId).injured);
+
+        horseOracle.reportRecovery(horseTokenId);
+
+        assertFalse(horseNFT.getHorseData(horseTokenId).injured);
+    }
+
+    function test_report_recovery_reverts_when_not_injured() public {
+        assertFalse(horseNFT.getHorseData(horseTokenId).injured);
+
+        vm.expectRevert("Not injured");
+        horseOracle.reportRecovery(horseTokenId);
+    }
+
+    function test_injury_and_recovery_can_cycle() public {
+        // The bug this guards: injury used to be an absorbing state, so a
+        // horse could never race again once hurt.
+        for (uint256 i = 0; i < 3; i++) {
+            horseOracle.reportInjury(horseTokenId, 1000);
+            assertTrue(horseNFT.getHorseData(horseTokenId).injured);
+            horseOracle.reportRecovery(horseTokenId);
+            assertFalse(horseNFT.getHorseData(horseTokenId).injured);
+        }
+    }
+
+    function test_report_recovery_requires_oracle_role() public {
+        horseOracle.reportInjury(horseTokenId, 1000);
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        horseOracle.reportRecovery(horseTokenId);
+    }
+
     function test_risk_score_6_on_already_frozen_vault_is_noop() public {
         // Freeze vault first
         vault.triggerLazarus();

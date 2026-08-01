@@ -27,7 +27,7 @@ export interface EventSource {
 export interface HorseEventBase {
   schemaVersion: "1.0";
   eventId: string;
-  eventType: "RACE_RESULT" | "INJURY" | "NEWS";
+  eventType: "RACE_RESULT" | "INJURY" | "NEWS" | "RECOVERY";
   occurredAt: string; // ISO-8601
   horse: {
     tokenId: number;
@@ -93,10 +93,29 @@ export interface NewsEvent extends HorseEventBase {
 }
 
 // ---------------------------------------------------------------------------
+// RECOVERY payload
+// ---------------------------------------------------------------------------
+
+export interface RecoveryEvent extends HorseEventBase {
+  eventType: "RECOVERY";
+  recovery: {
+    /** Catalog key of the injury being recovered from, when known. */
+    injuryType?: string;
+    /** Days of layoff the recovery represents (from the injury catalog). */
+    daysOut?: number;
+    notes?: string;
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Union
 // ---------------------------------------------------------------------------
 
-export type HorseEvent = RaceResultEvent | InjuryEvent | NewsEvent;
+export type HorseEvent =
+  | RaceResultEvent
+  | InjuryEvent
+  | NewsEvent
+  | RecoveryEvent;
 
 // ---------------------------------------------------------------------------
 // Deterministic JSON serialisation (zero runtime deps)

@@ -14,13 +14,30 @@ import type {
   RaceResultEvent,
   InjuryEvent,
   NewsEvent,
+  RecoveryEvent,
 } from "../../shared/events.js";
+import { INJURY_CATALOG } from "../../shared/injuries.js";
 
 const HORSE_INFT = process.env.NEXT_PUBLIC_HORSE_INFT;
 const INTERVAL_MS = Number(process.env.AUTO_SIM_INTERVAL_MS ?? 45_000);
 const ENABLED =
   process.env.AUTO_SIM_ENABLED !== "false" &&
   process.env.NODE_ENV !== "test";
+
+/** Share of ticks that produce an injury. Set to 0 to disable injuries. */
+const INJURY_RATE = Number(process.env.AUTO_SIM_INJURY_RATE ?? 0.15);
+/**
+ * Demo time compression: how many simulated days pass per tick. Real recovery
+ * windows run 60-365 days, so at 45s/tick and 30 days/tick a quarter crack
+ * heals in ~90s and a cannon fracture in ~9min — visible within a demo.
+ */
+const DAYS_PER_TICK = Number(process.env.AUTO_SIM_DAYS_PER_TICK ?? 30);
+/** Layoff assumed for horses already injured when the server started. */
+const UNKNOWN_INJURY_DAYS = 90;
+
+/** tokenId → tick at which the horse becomes eligible to recover. */
+const recoveryDue = new Map<number, { tick: number; injuryType: string; daysOut: number }>();
+let tickCount = 0;
 
 const TRACKS = [
   "Meydan",
@@ -115,13 +132,35 @@ function weightedPosition(): number {
 }
 
 function generateInjury(tokenId: number): InjuryEvent {
+  // Draw from the real veterinary catalog so the layoff length (and therefore
+  // the recovery schedule) matches the injury actually reported.
+  const key = pick(Object.keys(INJURY_CATALOG));
+  const c = INJURY_CATALOG[key];
   return {
     ...buildBase(tokenId),
     eventType: "INJURY",
     injury: {
-      type: pick(INJURY_TYPES),
-      severityBps: randInt(200, 2000),
-      expectedDaysOut: randInt(7, 90),
+      type: c.name,
+      // Contract caps severity at 5000 bps.
+      severityBps: Math.min(5000, Math.max(200, c.valuationImpactPct * 100)),
+      expectedDaysOut: c.recoveryDays,
+      notes: key,
+    },
+  };
+}
+
+function generateRecovery(
+  tokenId: number,
+  injuryType: string,
+  daysOut: number,
+): RecoveryEvent {
+  return {
+    ...buildBase(tokenId),
+    eventType: "RECOVERY",
+    recovery: {
+      injuryType,
+      daysOut,
+      notes: `Cleared to return to training after ${daysOut}-day layoff`,
     },
   };
 }
@@ -142,13 +181,14 @@ function generateNews(tokenId: number): NewsEvent {
 function generateRandomEvent(tokenId: number): HorseEvent {
   const r = Math.random();
   if (r < 0.55) return generateRaceResult(tokenId);
-  if (r < 0.70) return generateInjury(tokenId);
+  if (r < 0.55 + INJURY_RATE) return generateInjury(tokenId);
   return generateNews(tokenId);
 }
 
-async function discoverHorses(): Promise<number[]> {
+async function discoverHorses(): Promise<{ healthy: number[]; injured: number[] }> {
+  const empty = { healthy: [], injured: [] };
   if (!HORSE_INFT || HORSE_INFT === "0x0000000000000000000000000000000000000000") {
-    return [];
+    return empty;
   }
   const client = getPublicClient();
   const total = Number(
@@ -158,20 +198,48 @@ async function discoverHorses(): Promise<number[]> {
       functionName: "nextTokenId",
     }),
   );
-  if (total === 0) return [];
+  if (total === 0) return empty;
 
-  const ids: number[] = [];
+  const healthy: number[] = [];
+  const injured: number[] = [];
   for (let id = 0; id < total; id++) {
     try {
       const { features } = await fetchHorseFeatures(id);
-      if (features.retired || features.injured) continue;
+      if (features.retired) continue;
       if ((features.speed ?? 0) === 0 && (features.stamina ?? 0) === 0) continue;
-      ids.push(id);
+      if (features.injured) injured.push(id);
+      else healthy.push(id);
     } catch {
       // skip non-existent tokens
     }
   }
-  return ids;
+  return { healthy, injured };
+}
+
+/**
+ * Injured horses whose layoff has elapsed. Horses found injured with no
+ * recorded schedule (injured before this process started) are registered on
+ * first sight so they still recover rather than being stuck forever.
+ */
+function dueForRecovery(injured: number[]): number[] {
+  const due: number[] = [];
+  for (const id of injured) {
+    let entry = recoveryDue.get(id);
+    if (!entry) {
+      entry = {
+        tick: tickCount + Math.ceil(UNKNOWN_INJURY_DAYS / DAYS_PER_TICK),
+        injuryType: "unknown",
+        daysOut: UNKNOWN_INJURY_DAYS,
+      };
+      recoveryDue.set(id, entry);
+      console.log(
+        `[auto-sim] tokenId=${id} was already injured — scheduling recovery in ` +
+          `${entry.tick - tickCount} tick(s)`,
+      );
+    }
+    if (tickCount >= entry.tick) due.push(id);
+  }
+  return due;
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -181,20 +249,47 @@ async function tick() {
   if (running) return;
   running = true;
   try {
-    const horses = await discoverHorses();
-    if (horses.length === 0) {
-      console.log("[auto-sim] No eligible horses found, skipping tick");
+    tickCount++;
+    const { healthy, injured } = await discoverHorses();
+
+    // Recoveries take priority: they refill the eligible pool, so without this
+    // a run that injures everything can never resume racing.
+    const due = dueForRecovery(injured);
+
+    let tokenId: number;
+    let event: HorseEvent;
+    if (due.length > 0) {
+      tokenId = pick(due);
+      const entry = recoveryDue.get(tokenId)!;
+      event = generateRecovery(tokenId, entry.injuryType, entry.daysOut);
+      recoveryDue.delete(tokenId);
+    } else if (healthy.length > 0) {
+      tokenId = pick(healthy);
+      event = generateRandomEvent(tokenId);
+    } else {
+      console.log(
+        `[auto-sim] No eligible horses (${injured.length} injured, awaiting recovery), skipping tick`,
+      );
       return;
     }
 
-    const tokenId = pick(horses);
-    const event = generateRandomEvent(tokenId);
+    // Schedule the recovery for any injury we are about to apply.
+    if (event.eventType === "INJURY") {
+      const daysOut = event.injury.expectedDaysOut ?? UNKNOWN_INJURY_DAYS;
+      recoveryDue.set(tokenId, {
+        tick: tickCount + Math.ceil(daysOut / DAYS_PER_TICK),
+        injuryType: event.injury.notes ?? event.injury.type ?? "unknown",
+        daysOut,
+      });
+    }
     const eventLabel =
       event.eventType === "RACE_RESULT"
         ? `RACE P${(event as RaceResultEvent).result.finishPosition} at ${(event as RaceResultEvent).race.track}`
         : event.eventType === "INJURY"
           ? `INJURY (${(event as InjuryEvent).injury.type})`
-          : `NEWS ("${(event as NewsEvent).news.headline}")`;
+          : event.eventType === "RECOVERY"
+            ? `RECOVERY (${(event as RecoveryEvent).recovery.daysOut}-day layoff)`
+            : `NEWS ("${(event as NewsEvent).news.headline}")`;
 
     console.log(`[auto-sim] Generating ${eventLabel} for tokenId=${tokenId}`);
 
@@ -229,7 +324,10 @@ export function startAutoSimulator(): void {
     return;
   }
 
-  console.log(`[auto-sim] Starting auto-simulator (interval: ${INTERVAL_MS / 1000}s)`);
+  console.log(
+    `[auto-sim] Starting auto-simulator (interval: ${INTERVAL_MS / 1000}s, ` +
+      `injury rate: ${(INJURY_RATE * 100).toFixed(0)}%, ${DAYS_PER_TICK} sim-days/tick)`,
+  );
 
   // First tick after a short delay to let the server finish startup
   setTimeout(() => {
