@@ -48,7 +48,13 @@ const oracleAbi = parseAbi([
   "function reportRecovery(uint256 tokenId) external",
 ]);
 
-const engine = createEngine("formula");
+// "model" blends the XGBoost signal into the formula base when
+// server/data/model.json exists, and degrades to formula-only when it
+// doesn't (ModelEngine falls back internally). Override with
+// VALUATION_ENGINE=formula for strictly deterministic valuations.
+const engine = createEngine(
+  process.env.VALUATION_ENGINE === "formula" ? "formula" : "model",
+);
 
 // ---------------------------------------------------------------------------
 // Event type enum (matches Solidity)
