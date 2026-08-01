@@ -7,6 +7,7 @@ import "../src/KYCRegistry.sol";
 import "../src/HorseINFT.sol";
 import "../src/HorseSyndicateVault.sol";
 import "../src/HorseSyndicateVaultFactory.sol";
+import "../src/VaultDeployer.sol";
 import "../src/MockINFTOracle.sol";
 import "../src/MockADI.sol";
 
@@ -64,6 +65,13 @@ contract SecComplianceTest is Test, ERC721Holder {
         horseTokenId = horseNFT.mint(owner, "", bytes32(0), data);
 
         // Create vault
+        // Vault creation is delegated to VaultDeployer (split from the factory
+        // to stay under the EIP-170 bytecode limit), so the two must be wired
+        // to each other before createVault works. Mirrors script/Deploy.s.sol.
+        VaultDeployer vaultDeployer = new VaultDeployer();
+        vaultDeployer.setFactory(address(factory));
+        factory.setVaultDeployer(address(vaultDeployer));
+
         address vaultAddr = factory.createVault(horseTokenId, 1000, 1 ether, 30000, 4600, 8208);
         vault = HorseSyndicateVault(vaultAddr);
 

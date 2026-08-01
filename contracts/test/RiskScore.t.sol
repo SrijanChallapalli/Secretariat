@@ -7,6 +7,7 @@ import "../src/HorseINFT.sol";
 import "../src/HorseOracle.sol";
 import "../src/HorseSyndicateVault.sol";
 import "../src/HorseSyndicateVaultFactory.sol";
+import "../src/VaultDeployer.sol";
 import "../src/KYCRegistry.sol";
 import "../src/MockINFTOracle.sol";
 import "../src/MockADI.sol";
@@ -55,6 +56,18 @@ contract RiskScoreTest is Test, ERC721Holder {
 
         horseTokenId = horseNFT.mint(owner, "", bytes32(0), data);
 
+        // Vault creation is delegated to VaultDeployer (split from the factory
+        // to stay under the EIP-170 bytecode limit), so the two must be wired
+        // to each other before createVault works. Mirrors script/Deploy.s.sol.
+        VaultDeployer vaultDeployer = new VaultDeployer();
+        vaultDeployer.setFactory(address(factory));
+        factory.setVaultDeployer(address(vaultDeployer));
+
+        // VaultDeployer hands vault ownership to tx.origin, which in a forge
+        // test defaults to Foundry's sender rather than this contract. Prank
+        // both msg.sender and tx.origin so the test owns the vault and can
+        // call its onlyOwner functions below.
+        vm.prank(address(this), address(this));
         address vaultAddr = factory.createVault(horseTokenId, 1000, 1 ether, 30000, 4600, 8208);
         vault = HorseSyndicateVault(vaultAddr);
         vault.setHorseOracle(address(horseOracle));
