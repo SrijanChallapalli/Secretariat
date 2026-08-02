@@ -10,6 +10,8 @@ export interface MareItem {
   isTopMare?: boolean;
   /** Injured horses cannot breed — the contract reverts with "Not breedable". */
   injured?: boolean;
+  /** Newborns are minted with breedingAvailable=false and are also ineligible. */
+  notBreedable?: boolean;
 }
 
 interface MareSelectListProps {
@@ -47,13 +49,13 @@ export function MareSelectList({
         ) : (
           mares.map((mare) => {
             const selected = selectedId !== null && mare.id === selectedId;
-            const disabled = !!mare.injured;
+            const disabled = !!mare.injured || !!mare.notBreedable;
             return (
               <button
                 key={mare.id}
                 type="button"
                 disabled={disabled}
-                title={disabled ? "Recovering from injury — cannot breed until cleared" : undefined}
+                title={mare.injured ? "Recovering from injury — cannot breed until cleared" : mare.notBreedable ? "Not registered for breeding (newborns are not eligible)" : undefined}
                 onClick={() => { if (!disabled) onSelect(mare.id); }}
                 className={`w-full text-left px-4 py-3 rounded-md border transition-all ${
                   disabled
@@ -79,7 +81,7 @@ export function MareSelectList({
                       {disabled && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-500 shrink-0">
                           <Bandage className="h-3 w-3" />
-                          Recovering
+                          {mare.injured ? "Recovering" : "Not eligible"}
                         </span>
                       )}
                     </div>

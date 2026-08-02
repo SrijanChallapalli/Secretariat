@@ -83,7 +83,16 @@ async function parseOffspringIdFromReceipt(
   maxAttempts = 20
 ): Promise<number | null> {
   for (let i = 0; i < maxAttempts; i++) {
-    const receipt = await client.getTransactionReceipt({ hash });
+    // viem throws TransactionReceiptNotFoundError while the tx is still
+    // pending. That must not escape the loop, or a perfectly normal
+    // not-yet-mined receipt surfaces as "receipt could not be found" and
+    // masks the real on-chain revert reason.
+    let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>> | null = null;
+    try {
+      receipt = await client.getTransactionReceipt({ hash });
+    } catch {
+      receipt = null;
+    }
     if (receipt) {
       if (DEBUG_MINT_TRACE) {
         console.debug("[MintTrace] receipt", { txHash: hash, logCount: receipt.logs.length });
@@ -178,6 +187,7 @@ function toHorseTraits(
     pedigreeScore: raw.pedigreeScore,
     valuationADI: raw.valuationADI,
     injured: raw.injured,
+    breedingAvailable: raw.breedingAvailable,
     studFeeADI: listing?.studFeeADI ?? 0n,
   }));
 }
@@ -251,6 +261,7 @@ export default function BreedPage() {
       valuation: Number(formatEther(BigInt(h.valuationADI))),
       isTopMare: topIds.has(h.tokenId),
       injured: !!h.injured,
+      notBreedable: h.breedingAvailable === false,
     }));
   }, [horses]);
 
@@ -378,6 +389,10 @@ export default function BreedPage() {
       toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
       return;
     }
+    if (mare && mare.breedingAvailable === false) {
+      toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
+      return;
+    }
     const seed = keccak256(
       toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
     );
@@ -419,6 +434,10 @@ export default function BreedPage() {
     // signs, pays, or waits on a transaction that is guaranteed to revert.
     if (mare.injured) {
       toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    if (mare.breedingAvailable === false) {
+      toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
       return;
     }
     const chosenStallion = horses.find((h) => h.tokenId === stallionId);
@@ -542,6 +561,10 @@ export default function BreedPage() {
     // Pre-flight the contract's "Not breedable" require.
     if (mare.injured) {
       toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    if (mare.breedingAvailable === false) {
+      toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
       return;
     }
     const directStallion = horses.find((h) => h.tokenId === selectedStallionId);
