@@ -78,10 +78,16 @@ contract AgentExecutor is EIP712 {
         (uint256 studFee,,,,) = marketplace.listings(plan.chosenStallionTokenId);
         require(studFee <= plan.maxStudFeeADI && studFee <= plan.budgetADI, "Over budget");
 
+        // Act for plan.user, not as ourselves: the stud fee is pulled from the
+        // user, the breeding right is recorded against the user, and the
+        // offspring is minted to the user. Requires the user to have approved
+        // this contract as an ERC-721 operator on HorseINFT.
         if (!marketplace.hasBreedingRight(plan.chosenStallionTokenId, plan.user)) {
-            marketplace.purchaseBreedingRight(plan.chosenStallionTokenId, purchaseSeed);
+            marketplace.purchaseBreedingRightFor(plan.chosenStallionTokenId, purchaseSeed, plan.user);
         }
-        offspringId = marketplace.breed(plan.chosenStallionTokenId, plan.mareTokenId, offspringName, salt);
+        offspringId = marketplace.breedFor(
+            plan.chosenStallionTokenId, plan.mareTokenId, offspringName, salt, plan.user
+        );
         emit PlanExecuted(plan.user, plan.mareTokenId, plan.chosenStallionTokenId, offspringId);
         return offspringId;
     }

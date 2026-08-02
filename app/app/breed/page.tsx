@@ -319,6 +319,17 @@ export default function BreedPage() {
   const needsApproval = !!address && studFeeADI > 0n && adiAllowance !== undefined && adiAllowance < studFeeADI;
 
   const { writeContract: approveADI } = useWriteContract();
+  const { writeContractAsync: approveOperatorAsync } = useWriteContract();
+  const { writeContractAsync: executePlanAsync } = useWriteContract();
+
+  // Has the user granted AgentExecutor operator authority on their horses?
+  const { data: agentApproved, refetch: refetchAgentApproval } = useReadContract({
+    address: addresses.horseINFT,
+    abi: abis.HorseINFT,
+    functionName: "isApprovedForAll",
+    args: address ? [address, addresses.agentExecutor] : undefined,
+    query: { enabled: !!address },
+  });
 
   // Skip approve_adi when allowance is already sufficient
   useEffect(() => {
@@ -434,14 +445,19 @@ export default function BreedPage() {
       deadline,
       expectedOffspringTraitFloor: traitFloor,
     };
+    // Must match AgentExecutor's EIP712("SecretariatBreeding", "1") exactly.
+    // OpenZeppelin's _hashTypedDataV4 binds the domain to the verifying
+    // contract, so omitting verifyingContract produces a signature that fails
+    // ECDSA.recover on-chain.
     const domain = {
       name: "SecretariatBreeding",
       version: "1",
       chainId,
+      verifyingContract: addresses.agentExecutor,
     } as const;
 
     try {
-      await signTypedDataAsync({
+      const signature = await signTypedDataAsync({
         domain,
         types: BREEDING_PLAN_TYPE,
         primaryType: "BreedingPlan",
@@ -449,39 +465,36 @@ export default function BreedPage() {
       });
       setTimelineStep("purchase_right");
 
-      // Step 2: Purchase breeding right if needed (user is msg.sender, not AgentExecutor)
-      const alreadyHasRight = hasBreedingRight === true;
-      if (!alreadyHasRight) {
-        const seed = keccak256(
-          toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
-        );
-        toast.info("Purchasing breeding right...");
-        const purchaseHash = await purchaseRightAsync({
-          address: addresses.breedingMarketplace,
-          abi: abis.BreedingMarketplace,
-          functionName: "purchaseBreedingRight",
-          args: [BigInt(stallionId), seed],
+      // Step 2: Grant AgentExecutor operator authority once. This is what lets
+      // it act for the user without becoming the economic principal — the stud
+      // fee still comes from the user and the foal is minted to the user.
+      if (agentApproved !== true) {
+        toast.info("Authorizing the agent to execute your signed plan...");
+        const approvalHash = await approveOperatorAsync({
+          address: addresses.horseINFT,
+          abi: abis.HorseINFT,
+          functionName: "setApprovalForAll",
+          args: [addresses.agentExecutor, true],
         });
-        await publicClient.waitForTransactionReceipt({ hash: purchaseHash });
-        queryClient.invalidateQueries();
+        await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        await refetchAgentApproval();
       }
 
-      // Step 3: Breed (user is msg.sender, so mare ownership + breeding right checks pass)
+      // Step 3: Submit the signed plan to AgentExecutor, which re-verifies the
+      // signature, deadline and stud-fee-vs-budget on-chain before it acts.
       setTimelineStep("breed");
-      toast.info("Breeding offspring...");
+      toast.info("Executing signed plan on-chain...");
+      const seed = keccak256(
+        toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
+      );
       const salt = keccak256(
         toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
       );
-      const breedHash = await breedAsync({
-        address: addresses.breedingMarketplace,
-        abi: abis.BreedingMarketplace,
-        functionName: "breed",
-        args: [
-          BigInt(stallionId),
-          BigInt(mare.tokenId),
-          name || "Offspring",
-          salt,
-        ],
+      const breedHash = await executePlanAsync({
+        address: addresses.agentExecutor,
+        abi: abis.AgentExecutor,
+        functionName: "execute",
+        args: [plan, name || "Offspring", salt, seed, signature],
       });
 
       // Step 4: Parse offspring and notify
