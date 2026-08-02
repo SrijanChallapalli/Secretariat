@@ -21,6 +21,8 @@ export interface HorseTraits {
   tokenId: number;
   name?: string;
   injured?: boolean;
+  /** Contract requires this on BOTH parents; newborns are minted with false. */
+  breedingAvailable?: boolean;
   studFeeADI?: bigint | number;
 }
 

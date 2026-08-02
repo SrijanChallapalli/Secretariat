@@ -83,7 +83,16 @@ async function parseOffspringIdFromReceipt(
   maxAttempts = 20
 ): Promise<number | null> {
   for (let i = 0; i < maxAttempts; i++) {
-    const receipt = await client.getTransactionReceipt({ hash });
+    // viem throws TransactionReceiptNotFoundError while the tx is still
+    // pending. That must not escape the loop, or a perfectly normal
+    // not-yet-mined receipt surfaces as "receipt could not be found" and
+    // masks the real on-chain revert reason.
+    let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>> | null = null;
+    try {
+      receipt = await client.getTransactionReceipt({ hash });
+    } catch {
+      receipt = null;
+    }
     if (receipt) {
       if (DEBUG_MINT_TRACE) {
         console.debug("[MintTrace] receipt", { txHash: hash, logCount: receipt.logs.length });
@@ -178,6 +187,7 @@ function toHorseTraits(
     pedigreeScore: raw.pedigreeScore,
     valuationADI: raw.valuationADI,
     injured: raw.injured,
+    breedingAvailable: raw.breedingAvailable,
     studFeeADI: listing?.studFeeADI ?? 0n,
   }));
 }
@@ -214,8 +224,10 @@ export default function BreedPage() {
   );
 
   const mare = horses.find((h) => h.tokenId === Number(mareId));
+  // Injured horses cannot breed — the contract reverts with "Not breedable" —
+  // so keep them out of the candidate pool entirely.
   const stallions = horses.filter(
-    (h) => h.tokenId !== Number(mareId) && (h.studFeeADI ?? 0n) > 0n
+    (h) => h.tokenId !== Number(mareId) && (h.studFeeADI ?? 0n) > 0n && !h.injured
   );
 
   // Sync mareId when URL params change (e.g. navigation from horse card)
@@ -248,6 +260,8 @@ export default function BreedPage() {
       pedigree: Math.round(h.pedigreeScore / 100),
       valuation: Number(formatEther(BigInt(h.valuationADI))),
       isTopMare: topIds.has(h.tokenId),
+      injured: !!h.injured,
+      notBreedable: h.breedingAvailable === false,
     }));
   }, [horses]);
 
@@ -316,6 +330,17 @@ export default function BreedPage() {
   const needsApproval = !!address && studFeeADI > 0n && adiAllowance !== undefined && adiAllowance < studFeeADI;
 
   const { writeContract: approveADI } = useWriteContract();
+  const { writeContractAsync: approveOperatorAsync } = useWriteContract();
+  const { writeContractAsync: executePlanAsync } = useWriteContract();
+
+  // Has the user granted AgentExecutor operator authority on their horses?
+  const { data: agentApproved, refetch: refetchAgentApproval } = useReadContract({
+    address: addresses.horseINFT,
+    abi: abis.HorseINFT,
+    functionName: "isApprovedForAll",
+    args: address ? [address, addresses.agentExecutor] : undefined,
+    query: { enabled: !!address },
+  });
 
   // Skip approve_adi when allowance is already sufficient
   useEffect(() => {
@@ -352,6 +377,20 @@ export default function BreedPage() {
   const handlePurchaseRight = (stallionId: number) => {
     if (needsApproval) {
       toast.error("Approve ADI first, then purchase.");
+      return;
+    }
+    // Don't let the user pay a stud fee toward a pairing that cannot execute.
+    const stallion = horses.find((h) => h.tokenId === stallionId);
+    if (stallion?.injured) {
+      toast.error(`${stallion.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    if (mare?.injured) {
+      toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    if (mare && mare.breedingAvailable === false) {
+      toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
       return;
     }
     const seed = keccak256(
@@ -391,6 +430,21 @@ export default function BreedPage() {
       toast.error("Approve ADI first, then execute.");
       return;
     }
+    // Pre-flight the contract's "Not breedable" require so the user never
+    // signs, pays, or waits on a transaction that is guaranteed to revert.
+    if (mare.injured) {
+      toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    if (mare.breedingAvailable === false) {
+      toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
+      return;
+    }
+    const chosenStallion = horses.find((h) => h.tokenId === stallionId);
+    if (chosenStallion?.injured) {
+      toast.error(`${chosenStallion.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
 
     // Step 1: EIP-712 signature (compliance record, kept for UX ceremony)
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
@@ -410,14 +464,19 @@ export default function BreedPage() {
       deadline,
       expectedOffspringTraitFloor: traitFloor,
     };
+    // Must match AgentExecutor's EIP712("SecretariatBreeding", "1") exactly.
+    // OpenZeppelin's _hashTypedDataV4 binds the domain to the verifying
+    // contract, so omitting verifyingContract produces a signature that fails
+    // ECDSA.recover on-chain.
     const domain = {
       name: "SecretariatBreeding",
       version: "1",
       chainId,
+      verifyingContract: addresses.agentExecutor,
     } as const;
 
     try {
-      await signTypedDataAsync({
+      const signature = await signTypedDataAsync({
         domain,
         types: BREEDING_PLAN_TYPE,
         primaryType: "BreedingPlan",
@@ -425,39 +484,36 @@ export default function BreedPage() {
       });
       setTimelineStep("purchase_right");
 
-      // Step 2: Purchase breeding right if needed (user is msg.sender, not AgentExecutor)
-      const alreadyHasRight = hasBreedingRight === true;
-      if (!alreadyHasRight) {
-        const seed = keccak256(
-          toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
-        );
-        toast.info("Purchasing breeding right...");
-        const purchaseHash = await purchaseRightAsync({
-          address: addresses.breedingMarketplace,
-          abi: abis.BreedingMarketplace,
-          functionName: "purchaseBreedingRight",
-          args: [BigInt(stallionId), seed],
+      // Step 2: Grant AgentExecutor operator authority once. This is what lets
+      // it act for the user without becoming the economic principal — the stud
+      // fee still comes from the user and the foal is minted to the user.
+      if (agentApproved !== true) {
+        toast.info("Authorizing the agent to execute your signed plan...");
+        const approvalHash = await approveOperatorAsync({
+          address: addresses.horseINFT,
+          abi: abis.HorseINFT,
+          functionName: "setApprovalForAll",
+          args: [addresses.agentExecutor, true],
         });
-        await publicClient.waitForTransactionReceipt({ hash: purchaseHash });
-        queryClient.invalidateQueries();
+        await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        await refetchAgentApproval();
       }
 
-      // Step 3: Breed (user is msg.sender, so mare ownership + breeding right checks pass)
+      // Step 3: Submit the signed plan to AgentExecutor, which re-verifies the
+      // signature, deadline and stud-fee-vs-budget on-chain before it acts.
       setTimelineStep("breed");
-      toast.info("Breeding offspring...");
+      toast.info("Executing signed plan on-chain...");
+      const seed = keccak256(
+        toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
+      );
       const salt = keccak256(
         toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
       );
-      const breedHash = await breedAsync({
-        address: addresses.breedingMarketplace,
-        abi: abis.BreedingMarketplace,
-        functionName: "breed",
-        args: [
-          BigInt(stallionId),
-          BigInt(mare.tokenId),
-          name || "Offspring",
-          salt,
-        ],
+      const breedHash = await executePlanAsync({
+        address: addresses.agentExecutor,
+        abi: abis.AgentExecutor,
+        functionName: "execute",
+        args: [plan, name || "Offspring", salt, seed, signature],
       });
 
       // Step 4: Parse offspring and notify
@@ -491,6 +547,8 @@ export default function BreedPage() {
           msg.includes("KYC") ? "KYC required. Run seed script to verify your address." :
           msg.includes("allowance") ? "Approve ADI first, then execute." :
           msg.includes("Not mare owner") ? "You must own the mare to breed." :
+          msg.includes("Not breedable") ? "One of the horses is injured or not available for breeding. Wait for recovery and try again." :
+          msg.includes("No breeding right") ? "No valid breeding right for this stallion. Purchase one first." :
           `Breeding failed: ${msg.slice(0, 120)}`
         );
       }
@@ -500,6 +558,20 @@ export default function BreedPage() {
   const handleDirectBreed = async () => {
     if (!address || !mare || selectedStallionId === null || !publicClient) return;
     if (!directBreedName || !validateHorseName(directBreedName).valid) return;
+    // Pre-flight the contract's "Not breedable" require.
+    if (mare.injured) {
+      toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    if (mare.breedingAvailable === false) {
+      toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
+      return;
+    }
+    const directStallion = horses.find((h) => h.tokenId === selectedStallionId);
+    if (directStallion?.injured) {
+      toast.error(`${directStallion.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
 
     const salt = keccak256(
       toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
@@ -543,7 +615,11 @@ export default function BreedPage() {
       if (msg.includes("User rejected") || msg.includes("denied")) {
         toast.error("Transaction cancelled.");
       } else {
-        toast.error(msg.includes("right") ? "Purchase breeding right first." : "Failed to breed");
+        toast.error(
+          msg.includes("Not breedable") ? "One of the horses is injured or not available for breeding. Wait for recovery and try again." :
+          msg.includes("right") ? "Purchase breeding right first." :
+          "Failed to breed"
+        );
       }
     }
   };

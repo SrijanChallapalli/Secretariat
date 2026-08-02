@@ -260,7 +260,7 @@ def train(df: pd.DataFrame):
 # ── 5. Export ─────────────────────────────────────────────────────────────────
 
 def export_model(model, importances, metrics, sire_enc, damsire_enc,
-                 sire_target_enc, damsire_target_enc):
+                 sire_target_enc, damsire_target_enc, target_values=None):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     model_path = OUT_DIR / "model.json"
@@ -281,6 +281,18 @@ def export_model(model, importances, metrics, sire_enc, damsire_enc,
         "damsire_target_encoding": {k: float(v) for k, v in damsire_target_enc.items()},
         "sire_freq_threshold": 5,
     }
+
+    # Percentile curve of the target, so the TS runtime can convert a raw GBP
+    # prediction into "how good is this relative to the population" instead of
+    # dividing by a hardcoded constant. Prize money is zero-inflated and spans
+    # orders of magnitude, so a linear ratio saturates almost immediately.
+    if target_values is not None:
+        qs = [i / 100 for i in range(101)]
+        config["target_percentiles"] = {
+            "q": qs,
+            "values": [float(np.quantile(target_values, q)) for q in qs],
+        }
+
     config_path = OUT_DIR / "feature_config.json"
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
@@ -312,7 +324,8 @@ def main():
     model, importances, metrics = train(df)
 
     print("\nExporting model artifacts...")
-    export_model(model, importances, metrics, sire_enc, damsire_enc, sire_te, damsire_te)
+    export_model(model, importances, metrics, sire_enc, damsire_enc, sire_te, damsire_te,
+                 target_values=df[TARGET_COL].dropna().values)
 
     print("\n✓ Pipeline complete.")
 

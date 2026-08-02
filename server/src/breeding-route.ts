@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { XGBoostPredictor, type HorseInput } from "./xgboost-predictor.js";
+import { XGBoostPredictor, mlSignalStrength, type HorseInput } from "./xgboost-predictor.js";
 import { generateBreedingExplanation, isOgComputeConfigured } from "./og-compute.js";
 
 interface HorseData {
@@ -145,8 +145,15 @@ function scoreStallions(
         damsire: mare.damsire,
       };
       predictedOffspringValue = xgb.predict(offspringInput);
-      const median = 2500;
-      mlScore = Math.min(1, Math.max(0, predictedOffspringValue / (median * 5)));
+      // Dividing by a constant saturates: prize money is zero-inflated and
+      // spans four orders of magnitude, so every strong pairing pinned at 1.0
+      // and the ML term stopped separating the top picks — the one job it has
+      // here. mlSignalStrength interpolates on a log scale between anchors
+      // taken from the training distribution instead.
+      const curve = xgb.getConfig().targetPercentiles;
+      mlScore = curve
+        ? mlSignalStrength(predictedOffspringValue, curve)
+        : 0.5;
     }
 
     const score =

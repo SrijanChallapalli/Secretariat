@@ -11,7 +11,7 @@ import { calculateOfficialAge } from "../../shared/age";
 export interface HorseValuationInput {
   name?: string;
   age?: number;
-  sex?: "male" | "female";
+  sex?: "male" | "female" | "gelding";
   status?: "active" | "retired" | "deceased";
   speed?: number;
   stamina?: number;
@@ -103,9 +103,14 @@ export function calculateValue(
     winRate * 100000 +
     (horse.speed ?? 0) * 1000;
 
-  const offspringSuccessBonus = (horse.offspringWins ?? 0) * 5000;
-  let breedingValue =
-    (horse.pedigreeScore ?? 0) * 2000 + offspringSuccessBonus;
+  // Gelding Disconnect: castrated males have $0 breeding value, so parent and
+  // offspring performance do not feed their valuation. Mirrors the server
+  // engine in server/src/valuation-agent.ts.
+  const isGelding = horse.sex === "gelding";
+  const offspringSuccessBonus = isGelding ? 0 : (horse.offspringWins ?? 0) * 5000;
+  let breedingValue = isGelding
+    ? 0
+    : (horse.pedigreeScore ?? 0) * 2000 + offspringSuccessBonus;
   if (horse.sex === "male") breedingValue *= 1.2;
   else if (horse.sex === "female") breedingValue *= 1.0;
 
@@ -307,12 +312,12 @@ export interface HorseINFTLike {
   totalEarnings?: number;
   offspringCount?: number;
   offspringWins?: number;
-  sex?: "male" | "female";
+  sex?: "male" | "female" | "gelding";
 }
 
 export function mapHorseINFTToValuationInput(
   chain: HorseINFTLike,
-  options: { age?: number; sex?: "male" | "female"; wins?: number; totalRaces?: number; totalEarnings?: number; offspringCount?: number; offspringWins?: number } = {}
+  options: { age?: number; sex?: "male" | "female" | "gelding"; wins?: number; totalRaces?: number; totalEarnings?: number; offspringCount?: number; offspringWins?: number } = {}
 ): HorseValuationInput {
   const traits = chain.traitVector ?? [];
   const age =

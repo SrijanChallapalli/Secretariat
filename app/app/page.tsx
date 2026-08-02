@@ -108,12 +108,12 @@ export default function Dashboard() {
     const fmt = (v: bigint) => Number(formatEther(v)).toLocaleString(undefined, { maximumFractionDigits: 0 });
     const totalFmt = Number(formatEther(totalMarketADI)).toLocaleString(undefined, { maximumFractionDigits: 0 });
     const lockedFmt = Number(formatEther(capitalLockedADI)).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    // horses.length === 0 already returned null above, so a string fallback
+    // is always available here.
     const summary =
       top && entry
         ? `${top.name} leads at ${fmt(top.valuationADI)} ADI; ${entry.name} offers entry at ${fmt(entry.valuationADI)} ADI.`
-        : horses.length
-          ? `${horses.length} horses on market · ${totalFmt} ADI total.`
-          : null;
+        : `${horses.length} horses on market · ${totalFmt} ADI total.`;
     const sentiment =
       avgPed >= 88 && activeBreeding >= 2 ? "bullish" :
       avgPed >= 82 || activeBreeding >= 1 ? "cautiously bullish" :

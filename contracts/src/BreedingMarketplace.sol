@@ -18,6 +18,23 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
         _;
     }
 
+    /// @dev Every authorization, payment and mint in this contract is keyed to
+    ///      an `account`, not to msg.sender, so a delegated executor (e.g.
+    ///      AgentExecutor acting on a user-signed plan) can act for an owner
+    ///      without becoming the economic principal. msg.sender may act for
+    ///      `account` only if it is that account, or the account has approved
+    ///      it as an ERC-721 operator on HorseINFT.
+    function _requireCanActFor(address account) internal view {
+        require(
+            msg.sender == account || horseNFT.isApprovedForAll(account, msg.sender),
+            "Not authorized for account"
+        );
+    }
+
+    function _requireKYC(address account) internal view {
+        require(address(kycRegistry) == address(0) || kycRegistry.isVerified(account), "KYC required");
+    }
+
     struct Listing {
         uint256 studFeeADI;
         uint256 maxUses;
@@ -84,20 +101,36 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
         emit Unlisted(stallionId);
     }
 
-    function purchaseBreedingRight(uint256 stallionId, bytes32 seed) external nonReentrant onlyKYC {
+    function purchaseBreedingRight(uint256 stallionId, bytes32 seed) external {
+        _purchaseBreedingRight(stallionId, seed, msg.sender);
+    }
+
+    /// @notice Purchase a breeding right on behalf of `account`. The stud fee is
+    ///         pulled from `account` and the right is recorded against `account`,
+    ///         so the caller is only an executor, never the principal.
+    function purchaseBreedingRightFor(uint256 stallionId, bytes32 seed, address account) external {
+        _requireCanActFor(account);
+        _purchaseBreedingRight(stallionId, seed, account);
+    }
+
+    function _purchaseBreedingRight(uint256 stallionId, bytes32 seed, address account)
+        internal
+        nonReentrant
+    {
+        _requireKYC(account);
         Listing storage list_ = listings[stallionId];
         require(list_.active, "Not listed");
         require(list_.usedCount < list_.maxUses, "Max uses");
-        if (list_.useAllowlist) require(allowlist[stallionId][msg.sender], "Not allowlisted");
-        require(breedingRightExpiry[stallionId][msg.sender] == 0, "Already have right");
+        if (list_.useAllowlist) require(allowlist[stallionId][account], "Not allowlisted");
+        require(breedingRightExpiry[stallionId][account] == 0, "Already have right");
 
         address seller = horseNFT.ownerOf(stallionId);
-        adi.transferFrom(msg.sender, seller, list_.studFeeADI);
+        adi.transferFrom(account, seller, list_.studFeeADI);
 
         uint256 expiry = block.timestamp + breedingRightDuration;
-        breedingRightExpiry[stallionId][msg.sender] = expiry;
-        purchaseSeed[stallionId][msg.sender] = seed;
-        emit BreedingRightPurchased(stallionId, msg.sender, expiry, seed);
+        breedingRightExpiry[stallionId][account] = expiry;
+        purchaseSeed[stallionId][account] = seed;
+        emit BreedingRightPurchased(stallionId, account, expiry, seed);
     }
 
     function hasBreedingRight(uint256 stallionId, address user) public view returns (bool) {
@@ -123,17 +156,44 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
 
     function breed(uint256 stallionId, uint256 mareId, string calldata offspringName, bytes32 salt)
         external
+        returns (uint256 offspringId)
+    {
+        return _breed(stallionId, mareId, offspringName, salt, msg.sender);
+    }
+
+    /// @notice Breed on behalf of `account`. The mare must be owned by `account`,
+    ///         the breeding right must belong to `account`, and the offspring is
+    ///         minted to `account` — never to the caller.
+    function breedFor(
+        uint256 stallionId,
+        uint256 mareId,
+        string calldata offspringName,
+        bytes32 salt,
+        address account
+    ) external returns (uint256 offspringId) {
+        _requireCanActFor(account);
+        return _breed(stallionId, mareId, offspringName, salt, account);
+    }
+
+    function _breed(
+        uint256 stallionId,
+        uint256 mareId,
+        string calldata offspringName,
+        bytes32 salt,
+        address account
+    )
+        internal
         nonReentrant
         returns (uint256 offspringId)
     {
-        require(horseNFT.ownerOf(mareId) == msg.sender, "Not mare owner");
-        require(hasBreedingRight(stallionId, msg.sender), "No breeding right");
+        require(horseNFT.ownerOf(mareId) == account, "Not mare owner");
+        require(hasBreedingRight(stallionId, account), "No breeding right");
 
         HorseINFT.HorseData memory sire = horseNFT.getHorseData(stallionId);
         HorseINFT.HorseData memory dam = horseNFT.getHorseData(mareId);
         require(sire.breedingAvailable && dam.breedingAvailable && !sire.injured && !dam.injured, "Not breedable");
 
-        bytes32 seed = purchaseSeed[stallionId][msg.sender];
+        bytes32 seed = purchaseSeed[stallionId][account];
         (uint8[8] memory traits, uint16 pedigreeScore, bytes32 dnaHash) = _computeOffspring(sire, dam, seed, salt);
 
         listings[stallionId].usedCount += 1;
@@ -161,7 +221,7 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
             metadataHash: keccak256(abi.encodePacked(stallionId, mareId, seed, salt, block.chainid))
         });
 
-        offspringId = horseNFT.mint(msg.sender, "", offspringData.metadataHash, offspringData);
+        offspringId = horseNFT.mint(account, "", offspringData.metadataHash, offspringData);
         emit Bred(stallionId, mareId, offspringId);
         return offspringId;
     }

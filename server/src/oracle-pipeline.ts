@@ -19,6 +19,7 @@ import type {
   RaceResultEvent,
   InjuryEvent,
   NewsEvent,
+  RecoveryEvent,
 } from "../../shared/events.js";
 import { canonicalizeEvent } from "../../shared/events.js";
 import type { FeatureVector, ValuationResult } from "../../shared/types.js";
@@ -44,9 +45,16 @@ const oracleAbi = parseAbi([
   "function commitValuation(uint256 tokenId, uint8 eventType, bytes32 eventHash, uint256 newValuationADI, bytes32 ogRootHash) external",
   "function reportRiskScore(uint256 tokenId, uint8 riskScore) external",
   "function reportCriticalBiologicalEmergency(uint256 tokenId) external",
+  "function reportRecovery(uint256 tokenId) external",
 ]);
 
-const engine = createEngine("formula");
+// "model" blends the XGBoost signal into the formula base when
+// server/data/model.json exists, and degrades to formula-only when it
+// doesn't (ModelEngine falls back internally). Override with
+// VALUATION_ENGINE=formula for strictly deterministic valuations.
+const engine = createEngine(
+  process.env.VALUATION_ENGINE === "formula" ? "formula" : "model",
+);
 
 // ---------------------------------------------------------------------------
 // Event type enum (matches Solidity)
@@ -57,6 +65,7 @@ const EVENT_TYPE_ENUM: Record<string, number> = {
   INJURY: 1,
   NEWS: 2,
   BIOMETRIC: 3,
+  RECOVERY: 4,
 };
 
 // ---------------------------------------------------------------------------
@@ -71,8 +80,10 @@ export async function simulateEventRoute(req: Request, res: Response) {
       res.status(400).json({ error: "tokenId (number) required" });
       return;
     }
-    if (!type || !["RACE_RESULT", "INJURY", "NEWS", "BIOMETRIC"].includes(type)) {
-      res.status(400).json({ error: "type must be RACE_RESULT | INJURY | NEWS | BIOMETRIC" });
+    if (!type || !["RACE_RESULT", "INJURY", "NEWS", "BIOMETRIC", "RECOVERY"].includes(type)) {
+      res
+        .status(400)
+        .json({ error: "type must be RACE_RESULT | INJURY | NEWS | BIOMETRIC | RECOVERY" });
       return;
     }
 
@@ -124,6 +135,17 @@ export async function simulateEventRoute(req: Request, res: Response) {
           notes: (p.notes as string) ?? undefined,
         },
       } satisfies InjuryEvent;
+    } else if (type === "RECOVERY") {
+      const p = (params ?? {}) as Record<string, unknown>;
+      event = {
+        ...base,
+        eventType: "RECOVERY",
+        recovery: {
+          injuryType: (p.injuryType as string) ?? undefined,
+          daysOut: p.daysOut != null ? Number(p.daysOut) : undefined,
+          notes: (p.notes as string) ?? undefined,
+        },
+      } satisfies RecoveryEvent;
     } else if (type === "NEWS") {
       const p = (params ?? {}) as Record<string, unknown>;
       event = {
@@ -250,6 +272,18 @@ export async function applyEventCore(
     const engineData = { severityBps: horseEvent.injury.severityBps };
     valuationResult = engine.adjustForEvent(fullFeatures, "INJURY", engineData);
     multiplier = basePrediction.value > 0 ? valuationResult.value / basePrediction.value : 1;
+  } else if (horseEvent.eventType === "RECOVERY") {
+    // Returning to fitness recovers part of the value the injury took, scaled
+    // by how long the layoff was: a 60-day quarter crack rebounds harder than
+    // a 365-day fracture, which leaves lasting doubt over the horse.
+    const daysOut = horseEvent.recovery.daysOut ?? 90;
+    const uplift = Math.max(0.02, 0.18 - daysOut / 3000);
+    multiplier = 1 + uplift;
+    valuationResult = {
+      ...basePrediction,
+      value: basePrediction.value * multiplier,
+      explanation: `Returned to training after ${daysOut}-day layoff: +${(uplift * 100).toFixed(1)}%`,
+    };
   } else {
     const sentBps = (horseEvent as NewsEvent).news.sentimentBps;
     multiplier = 1 + sentBps / 10000;
@@ -311,6 +345,25 @@ export async function applyEventCore(
   const ogRootHashBytes = ogRootHash
     ? (`0x${ogRootHash.replace(/^0x/, "")}`.padEnd(66, "0") as `0x${string}`)
     : ("0x" + "00".repeat(32)) as `0x${string}`;
+
+  // Clear the injury flag on-chain before committing the valuation, so the
+  // horse is racing-eligible again the moment the recovery event lands.
+  if (horseEvent.eventType === "RECOVERY") {
+    const recoveryTx = await walletClient.writeContract({
+      address: HORSE_ORACLE,
+      abi: oracleAbi,
+      functionName: "reportRecovery",
+      args: [BigInt(tokenId)],
+    });
+    const recoveryReceipt = await publicClient.waitForTransactionReceipt({
+      hash: recoveryTx,
+      timeout: 15_000,
+    });
+    if (recoveryReceipt.status === "reverted") {
+      throw new Error(`reportRecovery reverted for tokenId=${tokenId}: ${recoveryTx}`);
+    }
+    console.log(`[oracle] reportRecovery(${tokenId}) confirmed (block ${recoveryReceipt.blockNumber})`);
+  }
 
   const txHash = await walletClient.writeContract({
     address: HORSE_ORACLE,

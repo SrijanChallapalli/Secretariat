@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, Crown, Check } from "lucide-react";
+import { Shield, Crown, Check, Bandage } from "lucide-react";
 
 export interface MareItem {
   id: number;
@@ -8,6 +8,10 @@ export interface MareItem {
   pedigree: number;
   valuation: number;
   isTopMare?: boolean;
+  /** Injured horses cannot breed — the contract reverts with "Not breedable". */
+  injured?: boolean;
+  /** Newborns are minted with breedingAvailable=false and are also ineligible. */
+  notBreedable?: boolean;
 }
 
 interface MareSelectListProps {
@@ -45,15 +49,20 @@ export function MareSelectList({
         ) : (
           mares.map((mare) => {
             const selected = selectedId !== null && mare.id === selectedId;
+            const disabled = !!mare.injured || !!mare.notBreedable;
             return (
               <button
                 key={mare.id}
                 type="button"
-                onClick={() => onSelect(mare.id)}
+                disabled={disabled}
+                title={mare.injured ? "Recovering from injury — cannot breed until cleared" : mare.notBreedable ? "Not registered for breeding (newborns are not eligible)" : undefined}
+                onClick={() => { if (!disabled) onSelect(mare.id); }}
                 className={`w-full text-left px-4 py-3 rounded-md border transition-all ${
-                  selected
-                    ? "border-prestige-gold/60 bg-card shadow-[0_0_0_1px_hsl(var(--prestige-gold)/0.3)]"
-                    : "border-border bg-card/40 hover:bg-card/70 hover:border-border/80"
+                  disabled
+                    ? "border-border/50 bg-card/20 opacity-60 cursor-not-allowed"
+                    : selected
+                      ? "border-prestige-gold/60 bg-card shadow-[0_0_0_1px_hsl(var(--prestige-gold)/0.3)]"
+                      : "border-border bg-card/40 hover:bg-card/70 hover:border-border/80"
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -66,8 +75,14 @@ export function MareSelectList({
                       >
                         {mare.name || `Horse #${mare.id}`}
                       </p>
-                      {mare.isTopMare && (
+                      {mare.isTopMare && !disabled && (
                         <Crown className="h-3.5 w-3.5 text-prestige-gold shrink-0" />
+                      )}
+                      {disabled && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-500 shrink-0">
+                          <Bandage className="h-3 w-3" />
+                          {mare.injured ? "Recovering" : "Not eligible"}
+                        </span>
                       )}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5">

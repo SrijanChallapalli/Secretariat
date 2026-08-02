@@ -367,8 +367,10 @@ export function BiometricModelCanvas(props: BiometricModelCanvasProps) {
         camera={{ position: [4.0, 0.5, 3.2], fov: 42 }}
         gl={{ antialias: true, alpha: true, premultipliedAlpha: false }}
         onCreated={({ gl }) => {
-          gl.setClearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
+          // three.js WebGLRenderer, not a raw WebGL context: setClearColor
+          // takes (color, alpha) and clear() takes booleans, not bitmasks.
+          gl.setClearColor(0x000000, 0);
+          gl.clear();
         }}
       >
         <Suspense

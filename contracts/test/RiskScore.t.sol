@@ -7,6 +7,7 @@ import "../src/HorseINFT.sol";
 import "../src/HorseOracle.sol";
 import "../src/HorseSyndicateVault.sol";
 import "../src/HorseSyndicateVaultFactory.sol";
+import "../src/VaultDeployer.sol";
 import "../src/KYCRegistry.sol";
 import "../src/MockINFTOracle.sol";
 import "../src/MockADI.sol";
@@ -55,6 +56,18 @@ contract RiskScoreTest is Test, ERC721Holder {
 
         horseTokenId = horseNFT.mint(owner, "", bytes32(0), data);
 
+        // Vault creation is delegated to VaultDeployer (split from the factory
+        // to stay under the EIP-170 bytecode limit), so the two must be wired
+        // to each other before createVault works. Mirrors script/Deploy.s.sol.
+        VaultDeployer vaultDeployer = new VaultDeployer();
+        vaultDeployer.setFactory(address(factory));
+        factory.setVaultDeployer(address(vaultDeployer));
+
+        // VaultDeployer hands vault ownership to tx.origin, which in a forge
+        // test defaults to Foundry's sender rather than this contract. Prank
+        // both msg.sender and tx.origin so the test owns the vault and can
+        // call its onlyOwner functions below.
+        vm.prank(address(this), address(this));
         address vaultAddr = factory.createVault(horseTokenId, 1000, 1 ether, 30000, 4600, 8208);
         vault = HorseSyndicateVault(vaultAddr);
         vault.setHorseOracle(address(horseOracle));
@@ -93,6 +106,41 @@ contract RiskScoreTest is Test, ERC721Holder {
 
         assertTrue(horseNFT.getHorseData(horseTokenId).injured);
         assertEq(horseOracle.riskScores(horseTokenId), 6);
+    }
+
+    function test_report_recovery_clears_injured_flag() public {
+        horseOracle.reportInjury(horseTokenId, 1500);
+        assertTrue(horseNFT.getHorseData(horseTokenId).injured);
+
+        horseOracle.reportRecovery(horseTokenId);
+
+        assertFalse(horseNFT.getHorseData(horseTokenId).injured);
+    }
+
+    function test_report_recovery_reverts_when_not_injured() public {
+        assertFalse(horseNFT.getHorseData(horseTokenId).injured);
+
+        vm.expectRevert("Not injured");
+        horseOracle.reportRecovery(horseTokenId);
+    }
+
+    function test_injury_and_recovery_can_cycle() public {
+        // The bug this guards: injury used to be an absorbing state, so a
+        // horse could never race again once hurt.
+        for (uint256 i = 0; i < 3; i++) {
+            horseOracle.reportInjury(horseTokenId, 1000);
+            assertTrue(horseNFT.getHorseData(horseTokenId).injured);
+            horseOracle.reportRecovery(horseTokenId);
+            assertFalse(horseNFT.getHorseData(horseTokenId).injured);
+        }
+    }
+
+    function test_report_recovery_requires_oracle_role() public {
+        horseOracle.reportInjury(horseTokenId, 1000);
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        horseOracle.reportRecovery(horseTokenId);
     }
 
     function test_risk_score_6_on_already_frozen_vault_is_noop() public {

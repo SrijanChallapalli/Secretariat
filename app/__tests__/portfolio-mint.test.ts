@@ -96,7 +96,7 @@ describe("portfolio-mint", () => {
         "0x" + "00".repeat(31) + "01",
         "0x" + "00".repeat(31) + "02",
         "0x" + "00".repeat(31) + "03",
-      ] as readonly `0x${string}`[];
+      ] as [`0x${string}`, ...`0x${string}`[]];
       const data = "0x" as `0x${string}`;
       const decoded = decodeEventLog({
         abi: [BRED_EVENT],

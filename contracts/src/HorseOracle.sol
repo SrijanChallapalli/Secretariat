@@ -45,6 +45,7 @@ contract HorseOracle is AccessControl {
     // --- Events ---
     event RaceResultReported(uint256 indexed tokenId, uint8 placing, uint256 earningsADI);
     event InjuryReported(uint256 indexed tokenId, uint16 severityBps);
+    event RecoveryReported(uint256 indexed tokenId, uint256 timestamp);
     event NewsReported(uint256 indexed tokenId, uint16 sentimentBps);
     event BiometricReported(
         uint256 indexed tokenId,
@@ -144,6 +145,20 @@ contract HorseOracle is AccessControl {
         horseNFT.updateValuation(tokenId, newVal);
         horseNFT.setInjured(tokenId, true);
         emit InjuryReported(tokenId, severityBps);
+    }
+
+    /// @notice Report that an injured horse has been cleared to return to
+    ///         training. The counterpart to reportInjury: without it, injury is
+    ///         an absorbing state and a horse can never race again.
+    /// @dev Valuation is deliberately not adjusted here. Recovery flows through
+    ///      the normal commitValuation path so the uplift is computed by the
+    ///      valuation engine like any other event.
+    function reportRecovery(uint256 tokenId) external onlyRole(ORACLE_ROLE) {
+        HorseINFT.HorseData memory h = horseNFT.getHorseData(tokenId);
+        require(h.injured, "Not injured");
+        require(!h.retired, "Horse retired");
+        horseNFT.setInjured(tokenId, false);
+        emit RecoveryReported(tokenId, block.timestamp);
     }
 
     function reportNews(uint256 tokenId, uint16 sentimentBps) external onlyRole(ORACLE_ROLE) {
