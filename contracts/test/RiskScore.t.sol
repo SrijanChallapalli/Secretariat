@@ -51,7 +51,8 @@ contract RiskScoreTest is Test, ERC721Holder {
             pedigreeScore: 5000, valuationADI: 100 ether,
             dnaHash: bytes32(0), breedingAvailable: false,
             injured: false, retired: false, xFactorCarrier: false,
-            encryptedURI: "", metadataHash: bytes32(0)
+            encryptedURI: "", metadataHash: bytes32(0),
+            sex: 0
         });
 
         horseTokenId = horseNFT.mint(owner, "", bytes32(0), data);

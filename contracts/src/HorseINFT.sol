@@ -26,7 +26,14 @@ contract HorseINFT is ERC721, Ownable {
         bool xFactorCarrier; // enlarged heart gene (X-chromosome inheritance)
         string encryptedURI; // 0G storage pointer / rootHash
         bytes32 metadataHash;
+        // Appended last so existing positional decoding of fields 0-13 is
+        // unaffected. 0 = male, 1 = female, 2 = gelding.
+        uint8 sex;
     }
+
+    uint8 public constant SEX_MALE = 0;
+    uint8 public constant SEX_FEMALE = 1;
+    uint8 public constant SEX_GELDING = 2;
 
     mapping(uint256 => HorseData) public horses;
     mapping(uint256 => address[]) public authorizedUsers;
@@ -71,7 +78,8 @@ contract HorseINFT is ERC721, Ownable {
             retired: data_.retired,
             xFactorCarrier: data_.xFactorCarrier,
             encryptedURI: encryptedURI_,
-            metadataHash: metadataHash_
+            metadataHash: metadataHash_,
+            sex: data_.sex
         });
         emit Minted(tokenId, to, encryptedURI_, metadataHash_);
         return tokenId;
@@ -133,9 +141,29 @@ contract HorseINFT is ERC721, Ownable {
         emit ValuationUpdated(tokenId, oldVal, newVal);
     }
 
-    function setBreedingAvailable(uint256 tokenId, bool available) external onlyOwner {
+    /// @notice Register a horse for breeding. The token owner may do this for
+    ///         their own horse — offspring are minted with breedingAvailable
+    ///         false, so without this a bred horse could never breed and the
+    ///         line would die out after one generation.
+    function setBreedingAvailable(uint256 tokenId, bool available) external {
+        require(
+            msg.sender == owner() || msg.sender == ownerOf(tokenId),
+            "Not contract or token owner"
+        );
+        require(!horses[tokenId].retired, "Horse retired");
         horses[tokenId].breedingAvailable = available;
         emit BreedingStatusUpdated(tokenId, available);
+    }
+
+    /// @dev Cheap parentage lookup for ancestry checks — returning the whole
+    ///      HorseData struct costs ~28k gas per call, which recursion multiplies.
+    function getParents(uint256 tokenId) external view returns (uint256 sireId, uint256 damId) {
+        HorseData storage h = horses[tokenId];
+        return (h.sireId, h.damId);
+    }
+
+    function getSex(uint256 tokenId) external view returns (uint8) {
+        return horses[tokenId].sex;
     }
 
     event InjuryStatusUpdated(uint256 indexed tokenId, bool injured);

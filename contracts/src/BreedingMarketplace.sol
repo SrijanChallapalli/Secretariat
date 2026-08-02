@@ -53,6 +53,9 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
     /// seed committed at purchase for deterministic offspring (stallionId => buyer => seed)
     mapping(uint256 => mapping(address => bytes32)) public purchaseSeed;
 
+    uint8 private constant SEX_MALE = 0;
+    uint8 private constant SEX_FEMALE = 1;
+
     uint256 public breedingRightDuration = 365 days;
     uint256 public sireWeight = 55;
     uint256 public damWeight = 45;
@@ -192,9 +195,18 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
         HorseINFT.HorseData memory sire = horseNFT.getHorseData(stallionId);
         HorseINFT.HorseData memory dam = horseNFT.getHorseData(mareId);
         require(sire.breedingAvailable && dam.breedingAvailable && !sire.injured && !dam.injured, "Not breedable");
+        // Relatedness first so pairing a horse with itself reports that
+        // directly rather than surfacing as a sex mismatch.
+        _requireNotCloselyRelated(stallionId, mareId);
+        require(sire.sex == SEX_MALE, "Sire must be male");
+        require(dam.sex == SEX_FEMALE, "Dam must be female");
 
         bytes32 seed = purchaseSeed[stallionId][account];
         (uint8[8] memory traits, uint16 pedigreeScore, bytes32 dnaHash) = _computeOffspring(sire, dam, seed, salt);
+        // 50/50 colt or filly, from a byte of the same commitment hash that
+        // drives trait mutation (bytes 0-7 are consumed by the eight traits).
+        uint8 offspringSex =
+            uint8((uint256(keccak256(abi.encodePacked(seed, salt))) >> 64) & 1);
 
         listings[stallionId].usedCount += 1;
         if (listings[stallionId].usedCount >= listings[stallionId].maxUses) {
@@ -218,12 +230,58 @@ contract BreedingMarketplace is Ownable, ReentrancyGuard {
             retired: false,
             xFactorCarrier: xFactor,
             encryptedURI: "",
-            metadataHash: keccak256(abi.encodePacked(stallionId, mareId, seed, salt, block.chainid))
+            metadataHash: keccak256(abi.encodePacked(stallionId, mareId, seed, salt, block.chainid)),
+            sex: offspringSex
         });
 
         offspringId = horseNFT.mint(account, "", offspringData.metadataHash, offspringData);
         emit Bred(stallionId, mareId, offspringId);
         return offspringId;
+    }
+
+    /// @dev A horse with no recorded parents is a founder. Note that token 0 is
+    ///      a real id, so "no parent" is only unambiguous when BOTH are zero.
+    function _isFounder(uint256 sireId_, uint256 damId_) private pure returns (bool) {
+        return sireId_ == 0 && damId_ == 0;
+    }
+
+    /// @dev Is `ancestorId` within `depth` generations above `descendantId`?
+    ///      depth 2 covers parents and grandparents.
+    function _isAncestorWithin(uint256 ancestorId, uint256 descendantId, uint8 depth)
+        internal
+        view
+        returns (bool)
+    {
+        if (depth == 0) return false;
+        (uint256 s, uint256 d) = horseNFT.getParents(descendantId);
+        if (_isFounder(s, d)) return false;
+        if (s == ancestorId || d == ancestorId) return true;
+        return _isAncestorWithin(ancestorId, s, depth - 1)
+            || _isAncestorWithin(ancestorId, d, depth - 1);
+    }
+
+    /// @dev Blocks close inbreeding only. Thoroughbred practice permits
+    ///      linebreeding (shared ancestors further back), so this deliberately
+    ///      stops at parent/grandparent and full or half siblings rather than
+    ///      rejecting any shared ancestry.
+    function _requireNotCloselyRelated(uint256 sireId, uint256 mareId) internal view {
+        require(sireId != mareId, "Cannot breed a horse with itself");
+
+        (uint256 sSire, uint256 sDam) = horseNFT.getParents(sireId);
+        (uint256 mSire, uint256 mDam) = horseNFT.getParents(mareId);
+        bool sireIsFounder = _isFounder(sSire, sDam);
+        bool mareIsFounder = _isFounder(mSire, mDam);
+
+        // Parent/grandparent in either direction.
+        require(!_isAncestorWithin(sireId, mareId, 2), "Too closely related");
+        require(!_isAncestorWithin(mareId, sireId, 2), "Too closely related");
+
+        // Full or half siblings. Founders all record (0,0) and are unrelated,
+        // so only compare when both have real recorded parents.
+        if (!sireIsFounder && !mareIsFounder) {
+            require(sSire != mSire, "Siblings cannot breed");
+            require(sDam != mDam, "Siblings cannot breed");
+        }
     }
 
     /// Heritability: weighted average + small mutation. Deterministic from seed + salt.

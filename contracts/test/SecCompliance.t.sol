@@ -59,7 +59,8 @@ contract SecComplianceTest is Test, ERC721Holder {
             retired: false,
             xFactorCarrier: false,
             encryptedURI: "",
-            metadataHash: bytes32(0)
+            metadataHash: bytes32(0),
+            sex: 0
         });
 
         horseTokenId = horseNFT.mint(owner, "", bytes32(0), data);
