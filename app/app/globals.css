@@ -49,42 +49,42 @@
 
   /* High-contrast terminal */
   [data-theme="terminal"] {
-    --card-hex: #0a0c12;
-    --background: 220 25% 6%;
+    --card-hex: #0C0C0C;
+    --background: 0 0% 4.7%;
     --foreground: 40 20% 96%;
-    --card: 220 25% 8%;
+    --card: 0 0% 7%;
     --card-foreground: 40 20% 96%;
-    --popover: 220 25% 8%;
+    --popover: 0 0% 7%;
     --popover-foreground: 40 20% 96%;
     --primary: 45 95% 55%;
-    --primary-foreground: 220 25% 6%;
+    --primary-foreground: 0 0% 5%;
     --secondary: 185 90% 50%;
-    --secondary-foreground: 220 25% 6%;
-    --muted: 220 20% 12%;
+    --secondary-foreground: 0 0% 5%;
+    --muted: 0 0% 11%;
     --muted-foreground: 40 15% 70%;
     --accent: 185 90% 50%;
-    --accent-foreground: 220 25% 6%;
+    --accent-foreground: 0 0% 5%;
     --destructive: 0 85% 55%;
     --destructive-foreground: 40 20% 98%;
-    --border: 220 20% 18%;
-    --input: 220 20% 10%;
+    --border: 0 0% 16%;
+    --input: 0 0% 9%;
     --ring: 45 95% 55%;
     --radius: 0.375rem;
     --terminal-green: 150 80% 45%;
     --terminal-red: 0 85% 55%;
     --terminal-amber: 45 95% 55%;
     --terminal-cyan: 185 90% 50%;
-    --heritage-walnut: 220 20% 12%;
-    --heritage-walnut-light: 220 18% 18%;
+    --heritage-walnut: 0 0% 11%;
+    --heritage-walnut-light: 0 0% 16%;
     --prestige-gold: 45 95% 55%;
     --prestige-gold-muted: 45 80% 45%;
-    --sidebar-background: 220 25% 6%;
+    --sidebar-background: 0 0% 4.7%;
     --sidebar-foreground: 40 20% 90%;
     --sidebar-primary: 45 95% 55%;
-    --sidebar-primary-foreground: 220 25% 6%;
-    --sidebar-accent: 220 20% 10%;
+    --sidebar-primary-foreground: 0 0% 5%;
+    --sidebar-accent: 0 0% 9%;
     --sidebar-accent-foreground: 45 95% 55%;
-    --sidebar-border: 220 20% 18%;
+    --sidebar-border: 0 0% 16%;
     --sidebar-ring: 45 95% 55%;
     --brand-ivory: 40 20% 96%;
     --brand-gold: 45 95% 55%;
@@ -231,12 +231,12 @@
   width: 6px;
 }
 .scrollbar-terminal::-webkit-scrollbar-track {
-  background: hsl(220 25% 6%);
+  background: hsl(var(--background));
 }
 .scrollbar-terminal::-webkit-scrollbar-thumb {
-  background: hsl(220 15% 25%);
+  background: hsl(var(--border));
   border-radius: 3px;
 }
 .scrollbar-terminal::-webkit-scrollbar-thumb:hover {
-  background: hsl(220 15% 35%);
+  background: hsl(var(--muted-foreground) / 0.4);
 }
