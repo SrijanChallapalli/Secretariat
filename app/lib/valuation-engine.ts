@@ -199,14 +199,14 @@ export interface HorseINFTLike {
   totalEarnings?: number;
   offspringCount?: number;
   offspringWins?: number;
-  sex?: "male" | "female";
+  sex?: "male" | "female" | "gelding";
 }
 
 export function toFeatureVector(
   chain: HorseINFTLike,
   offChain: {
     age?: number;
-    sex?: "male" | "female";
+    sex?: "male" | "female" | "gelding";
     status?: "active" | "retired" | "deceased";
     wins?: number;
     totalRaces?: number;
