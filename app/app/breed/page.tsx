@@ -214,8 +214,10 @@ export default function BreedPage() {
   );
 
   const mare = horses.find((h) => h.tokenId === Number(mareId));
+  // Injured horses cannot breed — the contract reverts with "Not breedable" —
+  // so keep them out of the candidate pool entirely.
   const stallions = horses.filter(
-    (h) => h.tokenId !== Number(mareId) && (h.studFeeADI ?? 0n) > 0n
+    (h) => h.tokenId !== Number(mareId) && (h.studFeeADI ?? 0n) > 0n && !h.injured
   );
 
   // Sync mareId when URL params change (e.g. navigation from horse card)
@@ -248,6 +250,7 @@ export default function BreedPage() {
       pedigree: Math.round(h.pedigreeScore / 100),
       valuation: Number(formatEther(BigInt(h.valuationADI))),
       isTopMare: topIds.has(h.tokenId),
+      injured: !!h.injured,
     }));
   }, [horses]);
 
@@ -354,6 +357,16 @@ export default function BreedPage() {
       toast.error("Approve ADI first, then purchase.");
       return;
     }
+    // Don't let the user pay a stud fee toward a pairing that cannot execute.
+    const stallion = horses.find((h) => h.tokenId === stallionId);
+    if (stallion?.injured) {
+      toast.error(`${stallion.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    if (mare?.injured) {
+      toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
     const seed = keccak256(
       toHex(new TextEncoder().encode(`${address}-${stallionId}-${Date.now()}`))
     );
@@ -389,6 +402,17 @@ export default function BreedPage() {
     if (!address || !mare || !publicClient) return;
     if (needsApproval) {
       toast.error("Approve ADI first, then execute.");
+      return;
+    }
+    // Pre-flight the contract's "Not breedable" require so the user never
+    // signs, pays, or waits on a transaction that is guaranteed to revert.
+    if (mare.injured) {
+      toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    const chosenStallion = horses.find((h) => h.tokenId === stallionId);
+    if (chosenStallion?.injured) {
+      toast.error(`${chosenStallion.name} is recovering from injury and cannot breed right now.`);
       return;
     }
 
@@ -491,6 +515,8 @@ export default function BreedPage() {
           msg.includes("KYC") ? "KYC required. Run seed script to verify your address." :
           msg.includes("allowance") ? "Approve ADI first, then execute." :
           msg.includes("Not mare owner") ? "You must own the mare to breed." :
+          msg.includes("Not breedable") ? "One of the horses is injured or not available for breeding. Wait for recovery and try again." :
+          msg.includes("No breeding right") ? "No valid breeding right for this stallion. Purchase one first." :
           `Breeding failed: ${msg.slice(0, 120)}`
         );
       }
@@ -500,6 +526,16 @@ export default function BreedPage() {
   const handleDirectBreed = async () => {
     if (!address || !mare || selectedStallionId === null || !publicClient) return;
     if (!directBreedName || !validateHorseName(directBreedName).valid) return;
+    // Pre-flight the contract's "Not breedable" require.
+    if (mare.injured) {
+      toast.error(`${mare.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
+    const directStallion = horses.find((h) => h.tokenId === selectedStallionId);
+    if (directStallion?.injured) {
+      toast.error(`${directStallion.name} is recovering from injury and cannot breed right now.`);
+      return;
+    }
 
     const salt = keccak256(
       toHex(new TextEncoder().encode(`${address}-${Date.now()}`))
@@ -543,7 +579,11 @@ export default function BreedPage() {
       if (msg.includes("User rejected") || msg.includes("denied")) {
         toast.error("Transaction cancelled.");
       } else {
-        toast.error(msg.includes("right") ? "Purchase breeding right first." : "Failed to breed");
+        toast.error(
+          msg.includes("Not breedable") ? "One of the horses is injured or not available for breeding. Wait for recovery and try again." :
+          msg.includes("right") ? "Purchase breeding right first." :
+          "Failed to breed"
+        );
       }
     }
   };
