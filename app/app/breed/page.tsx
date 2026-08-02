@@ -46,6 +46,7 @@ import {
   type TimelineStepId,
 } from "@/components/breeding/ExecutionTimeline";
 import { useHorsesWithListings } from "@/lib/hooks/useHorsesWithListings";
+import { SEX_MALE, SEX_FEMALE, sexLabel, closelyRelated } from "@/lib/breeding-rules";
 import { getTxExplorerUrl } from "@/lib/block-explorer";
 import { toast } from "sonner";
 
@@ -61,6 +62,7 @@ const BREEDING_PLAN_TYPE = {
     { name: "expectedOffspringTraitFloor", type: "bytes32" },
   ],
 } as const;
+
 
 const BADGES: ("RECOMMENDED" | "STRONG" | "VIABLE")[] = [
   "RECOMMENDED",
@@ -188,6 +190,9 @@ function toHorseTraits(
     valuationADI: raw.valuationADI,
     injured: raw.injured,
     breedingAvailable: raw.breedingAvailable,
+    sex: raw.sex,
+    sireId: Number(raw.sireId),
+    damId: Number(raw.damId),
     studFeeADI: listing?.studFeeADI ?? 0n,
   }));
 }
@@ -227,7 +232,13 @@ export default function BreedPage() {
   // Injured horses cannot breed — the contract reverts with "Not breedable" —
   // so keep them out of the candidate pool entirely.
   const stallions = horses.filter(
-    (h) => h.tokenId !== Number(mareId) && (h.studFeeADI ?? 0n) > 0n && !h.injured
+    (h) =>
+      h.tokenId !== Number(mareId) &&
+      (h.studFeeADI ?? 0n) > 0n &&
+      !h.injured &&
+      h.breedingAvailable !== false &&
+      h.sex === SEX_MALE &&
+      !closelyRelated(h, horses.find((m) => m.tokenId === Number(mareId)), horses)
   );
 
   // Sync mareId when URL params change (e.g. navigation from horse card)
@@ -252,9 +263,11 @@ export default function BreedPage() {
   }, [stallionParam, picks]);
 
   const mares: MareItem[] = useMemo(() => {
-    const sorted = [...horses].sort((a, b) => b.pedigreeScore - a.pedigreeScore);
+    // Only females can be a dam — the contract requires it.
+    const females = horses.filter((h) => h.sex === SEX_FEMALE);
+    const sorted = [...females].sort((a, b) => b.pedigreeScore - a.pedigreeScore);
     const topIds = new Set(sorted.slice(0, 3).map((h) => h.tokenId));
-    return horses.map((h) => ({
+    return females.map((h) => ({
       id: h.tokenId,
       name: String(h.name || `Horse #${h.tokenId}`),
       pedigree: Math.round(h.pedigreeScore / 100),
@@ -440,6 +453,19 @@ export default function BreedPage() {
       toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
       return;
     }
+    const chosen = horses.find((h) => h.tokenId === stallionId);
+    if (chosen && chosen.sex !== SEX_MALE) {
+      toast.error(`${chosen.name} is a ${sexLabel(chosen.sex).toLowerCase()} and cannot sire a foal.`);
+      return;
+    }
+    if (mare.sex !== SEX_FEMALE) {
+      toast.error(`${mare.name} is a ${sexLabel(mare.sex).toLowerCase()} and cannot carry a foal.`);
+      return;
+    }
+    if (closelyRelated(chosen, mare, horses)) {
+      toast.error(`${chosen?.name} and ${mare.name} are too closely related to breed.`);
+      return;
+    }
     const chosenStallion = horses.find((h) => h.tokenId === stallionId);
     if (chosenStallion?.injured) {
       toast.error(`${chosenStallion.name} is recovering from injury and cannot breed right now.`);
@@ -547,7 +573,12 @@ export default function BreedPage() {
           msg.includes("KYC") ? "KYC required. Run seed script to verify your address." :
           msg.includes("allowance") ? "Approve ADI first, then execute." :
           msg.includes("Not mare owner") ? "You must own the mare to breed." :
-          msg.includes("Not breedable") ? "One of the horses is injured or not available for breeding. Wait for recovery and try again." :
+          msg.includes("Not breedable") ? "One of the horses is injured or not registered for breeding." :
+          msg.includes("Sire must be male") ? "The chosen stallion is not male." :
+          msg.includes("Dam must be female") ? "The chosen mare is not female." :
+          msg.includes("Too closely related") ? "These horses are too closely related (parent or grandparent)." :
+          msg.includes("Siblings cannot breed") ? "These horses are siblings and cannot breed." :
+          msg.includes("itself") ? "A horse cannot breed with itself." :
           msg.includes("No breeding right") ? "No valid breeding right for this stallion. Purchase one first." :
           `Breeding failed: ${msg.slice(0, 120)}`
         );
@@ -565,6 +596,19 @@ export default function BreedPage() {
     }
     if (mare.breedingAvailable === false) {
       toast.error(`${mare.name} is not registered for breeding (newborns are not eligible).`);
+      return;
+    }
+    const directChosen = horses.find((h) => h.tokenId === selectedStallionId);
+    if (directChosen && directChosen.sex !== SEX_MALE) {
+      toast.error(`${directChosen.name} is a ${sexLabel(directChosen.sex).toLowerCase()} and cannot sire a foal.`);
+      return;
+    }
+    if (mare.sex !== SEX_FEMALE) {
+      toast.error(`${mare.name} is a ${sexLabel(mare.sex).toLowerCase()} and cannot carry a foal.`);
+      return;
+    }
+    if (closelyRelated(directChosen, mare, horses)) {
+      toast.error(`${directChosen?.name} and ${mare.name} are too closely related to breed.`);
       return;
     }
     const directStallion = horses.find((h) => h.tokenId === selectedStallionId);
@@ -616,7 +660,12 @@ export default function BreedPage() {
         toast.error("Transaction cancelled.");
       } else {
         toast.error(
-          msg.includes("Not breedable") ? "One of the horses is injured or not available for breeding. Wait for recovery and try again." :
+          msg.includes("Not breedable") ? "One of the horses is injured or not registered for breeding." :
+          msg.includes("Sire must be male") ? "The chosen stallion is not male." :
+          msg.includes("Dam must be female") ? "The chosen mare is not female." :
+          msg.includes("Too closely related") ? "These horses are too closely related (parent or grandparent)." :
+          msg.includes("Siblings cannot breed") ? "These horses are siblings and cannot breed." :
+          msg.includes("itself") ? "A horse cannot breed with itself." :
           msg.includes("right") ? "Purchase breeding right first." :
           "Failed to breed"
         );

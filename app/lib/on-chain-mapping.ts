@@ -21,6 +21,8 @@ export type RawHorseData = {
   breedingAvailable: boolean;
   injured: boolean;
   retired: boolean;
+  /** 0 = male, 1 = female, 2 = gelding. Struct index 14. */
+  sex: number;
 };
 
 export type RawListing = {
@@ -260,6 +262,7 @@ export function parseRawHorseData(result: unknown): RawHorseData | null {
   const breedingAvailable = Boolean(r.breedingAvailable ?? r[8] ?? false);
   const injured = Boolean(r.injured ?? r[9] ?? false);
   const retired = Boolean(r.retired ?? r[10] ?? false);
+  const sex = Number(r.sex ?? r[14] ?? 0);
 
   const hasName = typeof name === "string" && name.trim().length > 0;
   const hasBirth = birthTimestamp > 0n;
@@ -277,6 +280,7 @@ export function parseRawHorseData(result: unknown): RawHorseData | null {
     breedingAvailable,
     injured,
     retired,
+    sex,
   };
 }
 

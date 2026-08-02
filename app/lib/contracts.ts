@@ -27,11 +27,14 @@ export const abis = {
   ]),
   HorseINFT: parseAbi([
     "function ownerOf(uint256) view returns (address)",
-    "function getHorseData(uint256) view returns ((string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash))",
-    "function mint(address to, string encryptedURI, bytes32 metadataHash, (string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash) data) external returns (uint256)",
+    "function getHorseData(uint256) view returns ((string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash, uint8 sex))",
+    "function mint(address to, string encryptedURI, bytes32 metadataHash, (string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash, uint8 sex) data) external returns (uint256)",
     "function approve(address to, uint256 tokenId) external",
     "function setApprovalForAll(address operator, bool approved) external",
     "function isApprovedForAll(address owner, address operator) view returns (bool)",
+    "function setBreedingAvailable(uint256 tokenId, bool available) external",
+    "function getSex(uint256 tokenId) view returns (uint8)",
+    "function getParents(uint256 tokenId) view returns (uint256 sireId, uint256 damId)",
   ]),
   BreedingMarketplace: parseAbi([
     "function list(uint256 stallionId, uint256 studFeeADI, uint256 maxUses, bool useAllowlist) external",
