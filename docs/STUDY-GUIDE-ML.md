@@ -405,6 +405,152 @@ genuinely enforced on-chain.
 
 ---
 
+## 6b. The agent, end to end — how "Propose Breeding" actually works
+
+> This is the piece that turns the model into a product. Know it cold; it is
+> the most likely deep-dive target because it spans ML, contracts, and UX.
+
+### 6b.0 "The agent" is four separable things
+
+Being precise about this is the single most valuable framing you can offer:
+
+| Piece | Where | What it is |
+|---|---|---|
+| **Identity** | `BreedingAdvisorINFT` (on-chain) | NFT holding name, version, specialization, and a 0G Storage root hash of the model bundle |
+| **Intelligence** | `server/src/breeding-route.ts` + XGBoost | The scoring. Off-chain, in Node |
+| **Orchestration** | `app/lib/agent-proposal.ts` | Decides *what to evaluate* |
+| **Authority** | `AgentExecutor.sol` | Verifies a user-signed plan, enforces bounds on-chain |
+
+**The agent has no key, no wallet, and no autonomy.** It cannot initiate
+anything. That is the security story, and it is architectural rather than
+policy — see §6b.2.
+
+### 6b.1 The propose path
+
+**Step 1 — Data acquisition (on-chain reads).**
+`useHorsesWithListings()` multicalls `getHorseData(0..99)` and `listings(id)`.
+A second multicall of `ownerOf(id)` builds `ownedTokenIds`, using
+**lowercase-normalised comparison** — `ownerOf` returns EIP-55 checksummed
+addresses and wagmi may supply different casing; a naive `===` silently yields
+an empty set. (That exact bug is what the one Vitest file guards.)
+
+**Step 2 — Eligibility filtering** (`app/lib/breeding-rules.ts`), mirroring the
+contract's `require`s exactly:
+
+```typescript
+eligibleMares = owned && sex === FEMALE && !injured && breedingAvailable
+eligibleStallions(mare) =
+    sex === MALE && !injured && breedingAvailable
+    && studFeeADI > 0 && !closelyRelated(stallion, mare)
+```
+
+`closelyRelated` is a **depth-2 recursive ancestry walk** replicating
+`BreedingMarketplace._requireNotCloselyRelated`: parents and grandparents in
+both directions, plus a sibling check on shared `sireId`/`damId`.
+
+The founder guard matters: **token 0 is a real id**, so "no parent" is only
+unambiguous when *both* ids are zero. Without it, all eight seeded founders
+would look like siblings and nothing could breed.
+
+**Step 3 — Scoring (server, one request per mare).** For each stallion the
+server *synthesizes the unborn foal*:
+
+```typescript
+offspringTraits = sire.map((s,i) => Math.round(s*0.55 + dam[i]*0.45));
+pedigreeScore   = (mare.pedigreeScore + stallion.pedigreeScore) / 2;
+age: 3, sex: "C", sire: stallion.sire, damsire: mare.damsire
+```
+
+The 55/45 is deliberately **the same weighting the contract applies** in
+`_computeOffspring`, so the prediction describes the foal that would actually
+be minted — not an approximation of it. That foal goes through XGBoost, and
+the result is blended:
+
+```
+0.25·traits + 0.20·pedigree + 0.15·complement + 0.25·ML − 0.10·cost + 0.05·form
+```
+
+- `traits` — cosine similarity of the two 8-dim trait vectors
+- `complement` — for traits where the *mare* is below 0.8, the stallion's
+  average: "does he cover her weaknesses"
+- `ML` — `mlSignalStrength()`, the log-scaled mapping from §4
+
+**Step 4 — Global ranking** (`buildAgentProposal`). This is the actual
+difference from the breeding lab. The lab scores **one mare's** stallions; the
+agent iterates **every eligible mare**, flattens every `(mare, stallion, score)`
+triple into one array, sorts descending, and returns the top 3 across the whole
+cross-product.
+
+It simultaneously records *rejections* via `pairingBlockReason()`, which is what
+powers the "N pairings ruled out → *Galileos Edge is a parent of TestFoal*"
+disclosure. **The agent shows its work** rather than silently filtering — worth
+demoing, because it makes the genetics rules visible.
+
+Fallback: if the server is unreachable it uses `scoreStallions()` (client
+heuristic, **no ML term**) and the UI badges it *"scored locally"*, so you are
+never misled about which ran.
+
+### 6b.2 The execute path
+
+1. **Sign the EIP-712 plan.** The domain **must** include
+   `verifyingContract` — OpenZeppelin's `_hashTypedDataV4` binds the domain
+   separator to the contract address; omit it and `ECDSA.recover` returns a
+   different signer and reverts. This was a live bug, invisible because the
+   signature was never submitted.
+2. **Approve ADI → the marketplace** (not the executor — the marketplace pulls
+   the fee from *you*).
+3. **`setApprovalForAll(agentExecutor, true)`** — one-time, revocable ERC-721
+   operator grant. This is the authorization primitive.
+4. **`AgentExecutor.execute(...)`** re-verifies on-chain:
+
+```solidity
+require(msg.sender == plan.user);
+require(block.timestamp <= plan.deadline,             "Expired");
+signer = _hashTypedDataV4(structHash).recover(signature);
+require(signer == plan.user,                          "Invalid signature");
+require(horseNFT.ownerOf(plan.mareTokenId) == plan.user, "Not mare owner");
+(studFee,,,,) = marketplace.listings(plan.chosenStallionTokenId);
+require(studFee <= plan.maxStudFeeADI && studFee <= plan.budgetADI, "Over budget");
+marketplace.purchaseBreedingRightFor(stallion, seed, plan.user);
+marketplace.breedFor(stallion, mare, name, salt, plan.user);
+```
+
+It reads the **live** stud fee rather than trusting the plan, so a stallion
+owner raising their price between proposal and execution cannot exceed the cap
+you signed.
+
+The `*For` variants take an explicit `account`; authorization is
+`msg.sender == account || isApprovedForAll(account, msg.sender)`, and every
+economic effect keys to `account` — fee from you, right recorded to you,
+**foal minted to you**. The executor is a pure conduit that never holds value.
+
+### 6b.3 Where the intelligence actually lives
+
+`BreedingAdvisorINFT` is an **identity and provenance record, not a brain**. It
+stores a 0G Storage root hash of the model bundle so the intelligence is
+user-owned and integrity-verifiable.
+
+**The chain never executes the model.** If asked "is the AI on-chain?":
+
+> The model's identity and integrity hash are on-chain; inference is off-chain,
+> because running 500 gradient-boosted trees in the EVM would be economically
+> absurd. What is on-chain is the commitment to *which* model produced the
+> recommendation.
+
+### 6b.4 Boundaries to volunteer
+
+- Scoring is **sequential**, one HTTP round-trip per mare. Fine at 3 mares;
+  needs parallelising at scale.
+- The rules are **duplicated** client-side and on-chain *by design* — the
+  contract is the authority, the client copy exists so a rejected pairing is a
+  greyed-out option instead of a failed transaction. They live in one shared
+  module (`breeding-rules.ts`) precisely so they cannot drift — the lesson from
+  the ML constant that was copy-pasted into two call sites and fixed in only
+  one (§4.5).
+- Model inputs are still partly synthesized (§7).
+
+---
+
 ## 7. The honest caveat: synthesized inputs
 
 The model was trained on horses with **real race histories**. On-chain horses
@@ -457,6 +603,11 @@ Wire `logPrediction` into the pipeline so accuracy is measured against
 realized outcomes, then retrain on indexer data once enough real events
 accumulate.
 
+**"Walk me through what happens when a user clicks Propose Breeding."**
+See §6b — chain reads, eligibility filtering against a client mirror of the
+contract rules, per-mare server scoring on a synthesized foal, global ranking
+across the cross-product, then an EIP-712 plan the contract re-verifies.
+
 **"How is the ML prevented from doing damage?"**
 It never touches money directly. Valuation goes through the oracle role;
 breeding requires a user-signed plan and on-chain budget checks; the agent
@@ -478,3 +629,7 @@ wallet has rolling spend caps. (See NFT guide §7 for the caveat.)
 | `server/src/biometric-engine.ts` | Palmgren–Miner risk scoring |
 | `server/src/event-indexer.ts` | Training-data accumulation |
 | `server/src/prediction-log.ts` | Accuracy tracking (⚠ no callers) |
+| `app/lib/agent-proposal.ts` | Agent proposal engine — ranks the full cross-product |
+| `app/lib/breeding-rules.ts` | Shared eligibility rules (client mirror of the contract) |
+| `app/components/agent/AgentProposalCard.tsx` | Proposal UI, incl. "ruled out" disclosure |
+| `contracts/src/AgentExecutor.sol` | EIP-712 plan verification + on-chain bounds |

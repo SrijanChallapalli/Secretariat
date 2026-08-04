@@ -53,8 +53,8 @@ contract AgentDelegationTest is Test, ERC721Holder {
         kyc.verify(user);
         kyc.verify(stallionOwner);
 
-        stallionId = _mintHorse(stallionOwner, "Stallion", 9000);
-        mareId = _mintHorse(user, "Mare", 8000);
+        stallionId = _mintHorse(stallionOwner, "Stallion", 9000, 0); // male
+        mareId = _mintHorse(user, "Mare", 8000, 1);              // female
 
         vm.prank(stallionOwner);
         marketplace.list(stallionId, STUD_FEE, 10, false);
@@ -64,7 +64,7 @@ contract AgentDelegationTest is Test, ERC721Holder {
         adi.approve(address(marketplace), type(uint256).max);
     }
 
-    function _mintHorse(address to, string memory name, uint16 pedigree)
+    function _mintHorse(address to, string memory name, uint16 pedigree, uint8 sex)
         internal
         returns (uint256)
     {
@@ -82,7 +82,8 @@ contract AgentDelegationTest is Test, ERC721Holder {
             retired: false,
             xFactorCarrier: false,
             encryptedURI: "",
-            metadataHash: bytes32(0)
+            metadataHash: bytes32(0),
+            sex: sex
         });
         return horseNFT.mint(to, "", bytes32(0), d);
     }

@@ -21,7 +21,7 @@ const chain = { id: Number(process.env.CHAIN_ID_0G ?? 16602), name: "0G", native
 const abi = {
   MockADI: parseAbi(["function mint(address to, uint256 amount) external", "function balanceOf(address) view returns (uint256)"]),
   HorseINFT: parseAbi([
-    "function mint(address to, string calldata encryptedURI, bytes32 metadataHash, (string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash) data) external returns (uint256)",
+    "function mint(address to, string calldata encryptedURI, bytes32 metadataHash, (string name, uint64 birthTimestamp, uint256 sireId, uint256 damId, uint8[8] traitVector, uint16 pedigreeScore, uint256 valuationADI, bytes32 dnaHash, bool breedingAvailable, bool injured, bool retired, bool xFactorCarrier, string encryptedURI, bytes32 metadataHash, uint8 sex) data) external returns (uint256)",
     "function owner() view returns (address)",
   ]),
   BreedingMarketplace: parseAbi([
@@ -41,6 +41,7 @@ function encodeHorseData(opts: {
   pedigreeScore?: number;
   valuation?: bigint;
   breedingAvailable?: boolean;
+  sex?: number; // 0 = male, 1 = female
 }) {
   const traits = opts.traits ?? [80, 75, 70, 85, 90, 72, 78, 74];
   return {
@@ -56,6 +57,7 @@ function encodeHorseData(opts: {
     injured: false,
     retired: false,
     xFactorCarrier: false,
+    sex: opts.sex ?? 0,
     encryptedURI: "",
     metadataHash: `0x${"00".repeat(32)}` as `0x${string}`,
   };
@@ -86,17 +88,19 @@ async function main() {
   console.log("Minted 1M ADI to owner");
 
   // 8 horses total: 4 owned by deployer (IDs 0-3), 4 owned by Anvil #1 (IDs 4-7)
-  // Stallions: 0, 2, 4, 6 — Mares: 1, 3, 5, 7
+  // Stallions (sex 0 = male): 0, 2, 4, 6 — Mares (sex 1 = female): 1, 3, 5, 7
+  // Note 5 and 7 record sire 0 / dam 1, so they are daughters of Galileos Edge
+  // and full sisters — the contract blocks breeding them with either parent.
   // Names validated with validateHorseName(): ≤18 chars, no digits, not protected
   const horses = [
-    { data: encodeHorseData({ name: "Galileos Edge", traits: [85, 92, 78, 88, 95, 80, 90, 85], pedigreeScore: 9400, valuation: BigInt(8000e18), breedingAvailable: true }), to: owner },
-    { data: encodeHorseData({ name: "Storm Cat Lady", sireId: 0, traits: [88, 80, 82, 85, 90, 84, 78, 82], pedigreeScore: 8600, valuation: BigInt(4000e18), breedingAvailable: true }), to: owner },
-    { data: encodeHorseData({ name: "First Mission Colt", traits: [82, 85, 75, 90, 88, 82, 85, 78], pedigreeScore: 8200, valuation: BigInt(2500e18), breedingAvailable: true }), to: owner },
-    { data: encodeHorseData({ name: "Thunder Strike", traits: [90, 88, 75, 92, 85, 88, 82, 86], pedigreeScore: 9100, valuation: BigInt(6000e18), breedingAvailable: true }), to: owner },
-    { data: encodeHorseData({ name: "Midnight Runner", traits: [85, 90, 80, 87, 92, 85, 88, 84], pedigreeScore: 8800, valuation: BigInt(4500e18), breedingAvailable: true }), to: OTHER_OWNER },
-    { data: encodeHorseData({ name: "Golden Dawn", sireId: 0, damId: 1, traits: [82, 85, 78, 90, 88, 80, 85, 82], pedigreeScore: 8500, valuation: BigInt(3500e18), breedingAvailable: true }), to: OTHER_OWNER },
-    { data: encodeHorseData({ name: "Silver Bullet", traits: [88, 82, 72, 85, 90, 86, 80, 78], pedigreeScore: 8700, valuation: BigInt(4200e18), breedingAvailable: true }), to: OTHER_OWNER },
-    { data: encodeHorseData({ name: "Ocean Breeze", sireId: 0, damId: 1, traits: [80, 88, 85, 82, 90, 82, 78, 80], pedigreeScore: 8300, valuation: BigInt(2800e18), breedingAvailable: true }), to: OTHER_OWNER },
+    { data: encodeHorseData({ name: "Galileos Edge", sex: 0, traits: [85, 92, 78, 88, 95, 80, 90, 85], pedigreeScore: 9400, valuation: BigInt(8000e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "Storm Cat Lady", sex: 1, sireId: 0, traits: [88, 80, 82, 85, 90, 84, 78, 82], pedigreeScore: 8600, valuation: BigInt(4000e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "First Mission Colt", sex: 0, traits: [82, 85, 75, 90, 88, 82, 85, 78], pedigreeScore: 8200, valuation: BigInt(2500e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "Thunder Strike", sex: 1, traits: [90, 88, 75, 92, 85, 88, 82, 86], pedigreeScore: 9100, valuation: BigInt(6000e18), breedingAvailable: true }), to: owner },
+    { data: encodeHorseData({ name: "Midnight Runner", sex: 0, traits: [85, 90, 80, 87, 92, 85, 88, 84], pedigreeScore: 8800, valuation: BigInt(4500e18), breedingAvailable: true }), to: OTHER_OWNER },
+    { data: encodeHorseData({ name: "Golden Dawn", sex: 1, sireId: 0, damId: 1, traits: [82, 85, 78, 90, 88, 80, 85, 82], pedigreeScore: 8500, valuation: BigInt(3500e18), breedingAvailable: true }), to: OTHER_OWNER },
+    { data: encodeHorseData({ name: "Silver Bullet", sex: 0, traits: [88, 82, 72, 85, 90, 86, 80, 78], pedigreeScore: 8700, valuation: BigInt(4200e18), breedingAvailable: true }), to: OTHER_OWNER },
+    { data: encodeHorseData({ name: "Ocean Breeze", sex: 1, sireId: 0, damId: 1, traits: [80, 88, 85, 82, 90, 82, 78, 80], pedigreeScore: 8300, valuation: BigInt(2800e18), breedingAvailable: true }), to: OTHER_OWNER },
   ];
 
   const txHashes: `0x${string}`[] = [];

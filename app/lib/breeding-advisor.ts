@@ -23,6 +23,10 @@ export interface HorseTraits {
   injured?: boolean;
   /** Contract requires this on BOTH parents; newborns are minted with false. */
   breedingAvailable?: boolean;
+  /** 0 = male, 1 = female, 2 = gelding. */
+  sex?: number;
+  sireId?: number;
+  damId?: number;
   studFeeADI?: bigint | number;
 }
 

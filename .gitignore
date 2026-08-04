@@ -36,6 +36,10 @@ server/uploads/
 # Local mock 0G storage (testing only)
 server/mock-og-storage/
 
+# Python bytecode (ML training scripts)
+__pycache__/
+*.pyc
+
 # Logs and OS
 *.log
 .DS_Store
